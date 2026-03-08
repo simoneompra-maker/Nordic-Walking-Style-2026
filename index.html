@@ -1,0 +1,1390 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0a0e17">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>NW Style 2026 · Classifiche</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0a0e17;
+  --surf1: #131929;
+  --surf2: #1b2540;
+  --surf3: #243052;
+  --border: #2a3d5c;
+  --red: #e63329;
+  --red2: #ff5549;
+  --text: #e8edf5;
+  --text2: #a0b4cc;
+  --text3: #5a7a9a;
+  --nord: #22d3ee;
+  --cs: #fbbf24;
+  --sic: #a78bfa;
+  --ti: #60a5fa;
+  --fin: #e63329;
+  --green: #34d399;
+  --yellow: #fbbf24;
+  --font-head: 'Barlow Condensed', sans-serif;
+  --font-body: 'DM Sans', sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; background:var(--bg); color:var(--text); font-family:var(--font-body); font-size:14px; }
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width:6px; height:6px; }
+::-webkit-scrollbar-track { background:var(--surf1); }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+
+/* ── LAYOUT ── */
+#app { display:flex; flex-direction:column; height:100vh; }
+#header { 
+  background:var(--surf1); border-bottom:1px solid var(--border);
+  padding:0 20px; display:flex; align-items:center; gap:16px;
+  flex-shrink:0; height:56px;
+}
+.logo { font-family:var(--font-head); font-weight:800; font-size:20px; letter-spacing:1px; color:var(--text); }
+.logo span { color:var(--red); }
+#nav { display:flex; gap:2px; flex:1; overflow-x:auto; }
+.nav-btn {
+  font-family:var(--font-head); font-weight:600; font-size:13px; letter-spacing:.5px;
+  padding:6px 14px; border:none; background:transparent; color:var(--text3);
+  cursor:pointer; border-radius:6px; transition:all .2s; white-space:nowrap;
+  display:flex; align-items:center; gap:6px;
+}
+.nav-btn:hover { background:var(--surf2); color:var(--text2); }
+.nav-btn.active { background:var(--surf3); color:var(--text); }
+.nav-btn .dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+#content { flex:1; overflow-y:auto; padding:20px; }
+
+/* ── CARDS ── */
+.card { background:var(--surf1); border:1px solid var(--border); border-radius:12px; padding:20px; }
+.card-title { font-family:var(--font-head); font-weight:700; font-size:16px; letter-spacing:.5px; color:var(--text); margin-bottom:16px; display:flex; align-items:center; gap:8px; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; }
+.grid4 { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; }
+
+/* ── CIRCUIT BADGES ── */
+.badge { display:inline-flex; align-items:center; gap:5px; padding:3px 10px; border-radius:20px; font-family:var(--font-head); font-size:11px; font-weight:700; letter-spacing:.5px; }
+.badge-nord { background:rgba(34,211,238,.15); color:var(--nord); }
+.badge-cs { background:rgba(251,191,36,.15); color:var(--cs); }
+.badge-sic { background:rgba(167,139,250,.15); color:var(--sic); }
+.badge-ti { background:rgba(96,165,250,.15); color:var(--ti); }
+.badge-fin { background:rgba(230,51,41,.15); color:var(--fin); }
+.badge-jolly { background:rgba(230,51,41,.2); color:var(--red2); border:1px solid rgba(230,51,41,.3); }
+
+/* ── FORMS ── */
+.form-group { margin-bottom:14px; }
+label { display:block; font-size:11px; font-weight:600; color:var(--text3); text-transform:uppercase; letter-spacing:.8px; margin-bottom:6px; }
+select, input[type=text], input[type=password] {
+  width:100%; padding:10px 12px; background:var(--surf2); border:1px solid var(--border);
+  border-radius:8px; color:var(--text); font-family:var(--font-body); font-size:13px;
+  outline:none; transition:border-color .2s;
+}
+select:focus, input:focus { border-color:var(--red); }
+select option { background:var(--surf2); }
+
+/* ── BUTTONS ── */
+.btn { 
+  display:inline-flex; align-items:center; gap:6px; padding:9px 18px;
+  border:none; border-radius:8px; font-family:var(--font-head); font-weight:700;
+  font-size:13px; letter-spacing:.5px; cursor:pointer; transition:all .2s; text-decoration:none;
+}
+.btn-primary { background:var(--red); color:#fff; }
+.btn-primary:hover { background:var(--red2); transform:translateY(-1px); }
+.btn-secondary { background:var(--surf2); color:var(--text2); border:1px solid var(--border); }
+.btn-secondary:hover { background:var(--surf3); color:var(--text); }
+.btn-sm { padding:6px 12px; font-size:12px; }
+.btn-ghost { background:transparent; color:var(--text3); border:1px solid var(--border); }
+.btn-ghost:hover { background:var(--surf2); color:var(--text); }
+.btn-nord { background:rgba(34,211,238,.15); color:var(--nord); border:1px solid rgba(34,211,238,.3); }
+.btn-cs { background:rgba(251,191,36,.15); color:var(--cs); border:1px solid rgba(251,191,36,.3); }
+.btn-sic { background:rgba(167,139,250,.15); color:var(--sic); border:1px solid rgba(167,139,250,.3); }
+
+/* ── TABLES ── */
+.tbl-wrap { overflow-x:auto; border-radius:8px; }
+table { width:100%; border-collapse:collapse; font-size:13px; }
+thead tr { background:var(--surf2); }
+thead th { 
+  padding:10px 12px; text-align:left; font-family:var(--font-head); font-weight:700;
+  font-size:11px; letter-spacing:.8px; color:var(--text2); text-transform:uppercase;
+  border-bottom:1px solid var(--border);
+}
+tbody tr { border-bottom:1px solid rgba(42,61,92,.5); transition:background .1s; }
+tbody tr:hover { background:rgba(255,255,255,.03); }
+tbody td { padding:9px 12px; color:var(--text); }
+tbody tr.highlight-asd { background:rgba(230,51,41,.08) !important; }
+tbody tr.highlight-asd td { color:var(--text); }
+tbody tr.highlight-asd:hover { background:rgba(230,51,41,.12) !important; }
+.pos-badge { 
+  display:inline-flex; align-items:center; justify-content:center;
+  width:26px; height:26px; border-radius:6px; font-family:var(--font-head); font-weight:800; font-size:13px;
+}
+.pos-1 { background:rgba(251,191,36,.2); color:var(--yellow); }
+.pos-2 { background:rgba(160,176,204,.15); color:#a0b0c0; }
+.pos-3 { background:rgba(180,130,90,.15); color:#c8905a; }
+.pos-other { background:var(--surf2); color:var(--text3); }
+.pts { font-family:var(--font-head); font-weight:700; font-size:15px; color:var(--text); }
+.tot { color:var(--text2); font-size:12px; }
+
+/* ── UPLOAD ZONE ── */
+.upload-zone {
+  border:2px dashed var(--border); border-radius:12px; padding:32px;
+  text-align:center; cursor:pointer; transition:all .2s;
+  background:var(--surf1);
+}
+.upload-zone:hover, .upload-zone.dragover { border-color:var(--red); background:rgba(230,51,41,.05); }
+.upload-zone input { display:none; }
+.upload-icon { font-size:40px; margin-bottom:12px; }
+.upload-zone p { color:var(--text2); font-size:13px; }
+.upload-zone strong { color:var(--red); }
+
+/* ── PROGRESS / STATUS ── */
+.spinner { 
+  width:32px; height:32px; border:3px solid var(--border);
+  border-top-color:var(--red); border-radius:50%; animation:spin .8s linear infinite;
+  margin:0 auto;
+}
+@keyframes spin { to { transform:rotate(360deg); } }
+.status-loading { text-align:center; padding:32px; color:var(--text2); }
+.status-empty { text-align:center; padding:40px; color:var(--text3); font-size:13px; }
+
+/* ── MODAL ── */
+#modal-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.8); backdrop-filter:blur(4px);
+  z-index:1000; display:none; align-items:center; justify-content:center; padding:20px;
+}
+#modal-overlay.open { display:flex; }
+#modal-box {
+  background:var(--surf1); border:1px solid var(--border); border-radius:16px;
+  max-width:900px; width:100%; max-height:90vh; overflow-y:auto;
+  animation:modalIn .2s ease;
+}
+@keyframes modalIn { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
+.modal-header { 
+  padding:20px 24px; border-bottom:1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+  font-family:var(--font-head); font-weight:700; font-size:18px; position:sticky; top:0; background:var(--surf1); z-index:1;
+}
+.modal-body { padding:24px; }
+.modal-footer { padding:16px 24px; border-top:1px solid var(--border); display:flex; gap:10px; justify-content:flex-end; }
+.close-btn { background:none; border:none; color:var(--text3); cursor:pointer; font-size:20px; padding:4px; }
+.close-btn:hover { color:var(--text); }
+
+/* ── STAT CARDS ── */
+.stat-card { background:var(--surf1); border:1px solid var(--border); border-radius:10px; padding:16px; }
+.stat-label { font-size:11px; color:var(--text3); font-weight:600; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; }
+.stat-value { font-family:var(--font-head); font-weight:800; font-size:28px; }
+.stat-sub { font-size:11px; color:var(--text3); margin-top:4px; }
+
+/* ── TAPPA ITEM ── */
+.tappa-item { 
+  background:var(--surf2); border:1px solid var(--border); border-radius:8px;
+  padding:12px 16px; display:flex; align-items:center; gap:12px; margin-bottom:8px;
+}
+.tappa-date { font-size:12px; color:var(--text3); width:80px; flex-shrink:0; }
+.tappa-name { font-family:var(--font-head); font-weight:700; font-size:15px; flex:1; }
+.tappa-cats { display:flex; flex-wrap:wrap; gap:4px; }
+.cat-dot { 
+  width:8px; height:8px; border-radius:2px; 
+  title-attr:attr(title);
+}
+.tappa-no-data { color:var(--text3); font-size:12px; font-style:italic; }
+
+/* ── QUALIFICATION INDICATOR ── */
+.qual-yes { background:rgba(52,211,153,.15); color:var(--green); border:1px solid rgba(52,211,153,.3); border-radius:6px; padding:2px 8px; font-size:11px; font-weight:700; }
+.qual-maybe { background:rgba(251,191,36,.15); color:var(--yellow); border:1px solid rgba(251,191,36,.3); border-radius:6px; padding:2px 8px; font-size:11px; font-weight:700; }
+.qual-no { background:var(--surf2); color:var(--text3); border:1px solid var(--border); border-radius:6px; padding:2px 8px; font-size:11px; }
+
+/* ── EDITABLE TABLE ── */
+.edit-cell { 
+  width:100%; background:var(--surf2); border:1px solid transparent; border-radius:4px;
+  color:var(--text); font-family:var(--font-body); font-size:12px; padding:4px 6px;
+  outline:none;
+}
+.edit-cell:focus { border-color:var(--red); }
+
+/* ── DIVIDER ── */
+.divider { height:1px; background:var(--border); margin:20px 0; }
+
+/* ── TABS (secondary) ── */
+.tab-group { display:flex; gap:6px; margin-bottom:16px; flex-wrap:wrap; }
+.tab-btn {
+  padding:6px 14px; border-radius:20px; border:1px solid var(--border);
+  background:transparent; color:var(--text3); cursor:pointer; font-size:12px;
+  font-family:var(--font-head); font-weight:600; letter-spacing:.5px; transition:all .2s;
+}
+.tab-btn.active { border-color:currentColor; }
+.tab-btn.active.nord { color:var(--nord); background:rgba(34,211,238,.1); }
+.tab-btn.active.cs { color:var(--cs); background:rgba(251,191,36,.1); }
+.tab-btn.active.sic { color:var(--sic); background:rgba(167,139,250,.1); }
+.tab-btn.active.ti { color:var(--ti); background:rgba(96,165,250,.1); }
+.tab-btn.active.fin { color:var(--fin); background:rgba(230,51,41,.1); }
+
+/* ── EXPORT BAR ── */
+.export-bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+
+/* ── ALERT ── */
+.alert { border-radius:8px; padding:12px 16px; font-size:13px; margin-bottom:16px; }
+.alert-info { background:rgba(96,165,250,.1); border:1px solid rgba(96,165,250,.3); color:var(--ti); }
+.alert-warn { background:rgba(251,191,36,.1); border:1px solid rgba(251,191,36,.3); color:var(--yellow); }
+.alert-err { background:rgba(230,51,41,.1); border:1px solid rgba(230,51,41,.3); color:var(--red2); }
+.alert-ok { background:rgba(52,211,153,.1); border:1px solid rgba(52,211,153,.3); color:var(--green); }
+
+/* ── RESPONSIVE ── */
+@media(max-width:768px) {
+  .grid2, .grid3, .grid4 { grid-template-columns:1fr; }
+  #header { padding:0 12px; }
+  #content { padding:12px; }
+}
+
+/* ── PRINT ── */
+@media print {
+  #header, #nav, .export-bar, .btn, .tab-group { display:none !important; }
+  body { background:#fff; color:#000; }
+  table { border-collapse:collapse; }
+  td, th { border:1px solid #ccc; padding:6px; }
+}
+
+/* ── TAPPA ITALIA accent ── */
+.ti-accent { border-left:3px solid var(--ti); }
+.nord-accent { border-left:3px solid var(--nord); }
+.cs-accent { border-left:3px solid var(--cs); }
+.sic-accent { border-left:3px solid var(--sic); }
+
+.row-delete { cursor:pointer; color:var(--text3); font-size:14px; }
+.row-delete:hover { color:var(--red); }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="header">
+    <div class="logo">NW <span>STYLE</span> 2026</div>
+    <nav id="nav">
+      <button class="nav-btn active" onclick="showTab('dashboard')" id="tab-dashboard">
+        <span class="dot" style="background:#e63329"></span> Dashboard
+      </button>
+      <button class="nav-btn" onclick="showTab('upload')" id="tab-upload">
+        <span class="dot" style="background:#60a5fa"></span> Carica Tappa
+      </button>
+      <button class="nav-btn" onclick="showTab('classifiche')" id="tab-classifiche">
+        <span class="dot" style="background:#22d3ee"></span> Classifiche
+      </button>
+      <button class="nav-btn" onclick="showTab('finalissima')" id="tab-finalissima">
+        <span class="dot" style="background:#fbbf24"></span> Finalissima
+      </button>
+      <button class="nav-btn" onclick="showTab('settings')" id="tab-settings">
+        <span class="dot" style="background:#a78bfa"></span> Impostazioni
+      </button>
+    </nav>
+  </header>
+  <main id="content">
+    <div id="view-dashboard"></div>
+    <div id="view-upload" style="display:none"></div>
+    <div id="view-classifiche" style="display:none"></div>
+    <div id="view-finalissima" style="display:none"></div>
+    <div id="view-settings" style="display:none"></div>
+  </main>
+</div>
+
+<!-- MODAL -->
+<div id="modal-overlay">
+  <div id="modal-box">
+    <div class="modal-header">
+      <span id="modal-title">Revisione dati OCR</span>
+      <button class="close-btn" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+    <div class="modal-footer" id="modal-footer"></div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+// DATI STATICI
+// ═══════════════════════════════════════════
+
+const STAGES = [
+  // Tappa Italia
+  { id:'bologna-ti', name:'Bologna', date:'2026-04-19', circuits:['ti','nord','cs','sic'], jollyFor:[], label:'Tappa Italia' },
+  // Nord
+  { id:'bassano', name:'Bassano', date:'2026-05-17', circuits:['nord'], jollyFor:[], label:'Nord' },
+  { id:'illasi', name:'Illasi (notturna)', date:'2026-07-04', circuits:['nord'], jollyFor:[], label:'Nord' },
+  { id:'feltre', name:'Feltre', date:'2026-08-30', circuits:['nord'], jollyFor:[], label:'Nord' },
+  { id:'mestre', name:'Mestre', date:'2026-09-12', circuits:['nord'], jollyFor:[], label:'Nord' },
+  { id:'torino', name:'Torino', date:'2026-09-27', circuits:['nord'], jollyFor:['nord'], label:'Nord' },
+  // Centro-Sud
+  { id:'pomezia', name:'Pomezia', date:'2026-03-29', circuits:['cs'], jollyFor:[], label:'Centro-Sud' },
+  { id:'tortoreto', name:'Tortoreto', date:'2026-05-23', circuits:['cs'], jollyFor:[], label:'Centro-Sud' },
+  { id:'urbisaglia', name:'Urbisaglia', date:'2026-06-07', circuits:['cs'], jollyFor:[], label:'Centro-Sud' },
+  { id:'avigliano', name:'Avigliano', date:'2026-09-06', circuits:['cs'], jollyFor:['cs'], label:'Centro-Sud' },
+  { id:'tivoli', name:'Tivoli', date:'2026-09-20', circuits:['cs'], jollyFor:[], label:'Centro-Sud' },
+  // Sicilia
+  { id:'catania', name:'Catania', date:'2026-03-22', circuits:['sic'], jollyFor:[], label:'Sicilia' },
+  { id:'ragusa', name:'Ragusa', date:'2026-05-24', circuits:['sic'], jollyFor:[], label:'Sicilia' },
+  { id:'palermo', name:'Palermo', date:'2026-06-13', circuits:['sic'], jollyFor:['sic'], label:'Sicilia' },
+  // Finalissima
+  { id:'san-dona', name:"S. Donà di Piave", date:'2026-10-18', circuits:['fin'], jollyFor:[], label:'Finalissima' }
+];
+
+const CATEGORIES = [
+  { id:'istruttore-m', name:'Istruttore Maschile', short:'Istr. M', type:'individual' },
+  { id:'istruttore-f', name:'Istruttore Femminile', short:'Istr. F', type:'individual' },
+  { id:'camminatore-m', name:'Camminatore Maschile', short:'Camm. M', type:'individual' },
+  { id:'camminatore-f', name:'Camminatrice Femminile', short:'Camm. F', type:'individual' },
+  { id:'coppia-istruttori', name:'Coppie Istruttori', short:'C. Istr.', type:'coppia' },
+  { id:'coppia-camminatori', name:'Coppie Camminatori', short:'C. Camm.', type:'coppia' },
+  { id:'coppia-miste', name:'Coppie Miste', short:'C. Miste', type:'coppia' }
+];
+
+const CIRCUITS = {
+  ti: { name:'Tappa Italia', color:'var(--ti)', cls:'ti' },
+  nord: { name:'Circuito Nord', color:'var(--nord)', cls:'nord' },
+  cs: { name:'Centro-Sud', color:'var(--cs)', cls:'cs' },
+  sic: { name:'Sicilia', color:'var(--sic)', cls:'sic' },
+  fin: { name:'Finalissima', color:'var(--fin)', cls:'fin' }
+};
+
+// Qualificazione Finalissima
+const QUAL_LIMITS = {
+  nord: { default:10, 'camminatore-f':15 },
+  cs: { default:10, 'camminatore-f':15 },
+  sic: { default:5, 'camminatore-f':10 }
+};
+
+// ═══════════════════════════════════════════
+// DATABASE (localStorage)
+// ═══════════════════════════════════════════
+
+let DB = { settings:{ apiKey:'', asdHighlight:'Sile Walking' }, results:{} };
+
+function loadDB() {
+  const raw = localStorage.getItem('nws2026');
+  if(raw) try { DB = JSON.parse(raw); } catch(e){}
+  if(!DB.settings) DB.settings = { apiKey:'', asdHighlight:'Sile Walking' };
+  if(!DB.results) DB.results = {};
+}
+
+function saveDB() {
+  localStorage.setItem('nws2026', JSON.stringify(DB));
+}
+
+function resultKey(stageId, catId) { return `${stageId}__${catId}`; }
+
+function saveResult(stageId, catId, rows) {
+  DB.results[resultKey(stageId,catId)] = {
+    stageId, catId, rows,
+    savedAt: new Date().toISOString()
+  };
+  saveDB();
+}
+
+function getResult(stageId, catId) {
+  return DB.results[resultKey(stageId,catId)];
+}
+
+function hasResult(stageId, catId) {
+  return !!DB.results[resultKey(stageId,catId)];
+}
+
+// Calcola classifica cumulativa per un circuito + categoria
+function getCircuitStandings(circuitId, catId) {
+  const cat = CATEGORIES.find(c=>c.id===catId);
+  const stagesForCircuit = STAGES.filter(s=>s.circuits.includes(circuitId) && s.id!=='san-dona');
+  const isJollyFn = (stage) => stage.jollyFor.includes(circuitId);
+
+  const athleteMap = {}; // key -> { name, assoc, stages:[], total }
+  
+  for(const stage of stagesForCircuit) {
+    const res = getResult(stage.id, catId);
+    if(!res) continue;
+    const isJolly = isJollyFn(stage);
+
+    for(const row of res.rows) {
+      const key = cat.type==='coppia'
+        ? `${norm(row.p1||'')}|${norm(row.p2||'')}`
+        : `${norm(row.cognome||'')} ${norm(row.nome||'')}`;
+      
+      if(!athleteMap[key]) {
+        athleteMap[key] = {
+          key,
+          display: cat.type==='coppia' 
+            ? `${row.p1||''} / ${row.p2||''}`
+            : `${row.cognome||''} ${row.nome||''}`,
+          assoc: row.assoc||'',
+          stages: [],
+          total: 0
+        };
+      }
+      
+      const pts = parseItalianFloat(row.pts);
+      const multiplied = isJolly ? pts * 2 : pts;
+      athleteMap[key].stages.push({ stageId:stage.id, stageName:stage.name, pts, ptsUsed:multiplied, isJolly });
+      athleteMap[key].total += multiplied;
+      athleteMap[key].assoc = row.assoc||athleteMap[key].assoc;
+    }
+  }
+
+  return Object.values(athleteMap)
+    .sort((a,b)=>b.total-a.total)
+    .map((a,i)=>({ ...a, pos:i+1 }));
+}
+
+function norm(s) { return s.trim().toLowerCase(); }
+function parseItalianFloat(s) {
+  if(typeof s==='number') return s;
+  return parseFloat(String(s).replace(',','.')) || 0;
+}
+
+// ═══════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════
+
+let activeTab = 'dashboard';
+let classifState = { circuit:'nord', cat:'istruttore-m' };
+let finState = { circuit:'nord', cat:'istruttore-m' };
+let uploadState = { stage:null, cat:null };
+
+function showTab(tab) {
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById(`tab-${tab}`).classList.add('active');
+  document.querySelectorAll('#content > div').forEach(d=>d.style.display='none');
+  document.getElementById(`view-${tab}`).style.display='';
+  activeTab = tab;
+  render(tab);
+}
+
+function render(tab) {
+  if(tab==='dashboard') renderDashboard();
+  else if(tab==='upload') renderUpload();
+  else if(tab==='classifiche') renderClassifiche();
+  else if(tab==='finalissima') renderFinalissima();
+  else if(tab==='settings') renderSettings();
+}
+
+// ═══════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════
+
+function renderDashboard() {
+  const el = document.getElementById('view-dashboard');
+  
+  // Conta risultati caricati
+  const total = Object.keys(DB.results).length;
+  const possible = (STAGES.length - 1) * CATEGORIES.length; // -1 per finalissima
+  
+  // Per circuito: tappe con almeno 1 cat caricata
+  const circuitProgress = {};
+  for(const cid of ['ti','nord','cs','sic']) {
+    const stages = STAGES.filter(s=>s.circuits.includes(cid) && s.id!=='san-dona');
+    let loaded=0, totalCats=stages.length*CATEGORIES.length;
+    for(const s of stages) for(const c of CATEGORIES) if(hasResult(s.id,c.id)) loaded++;
+    circuitProgress[cid] = { loaded, total:totalCats, stages:stages.length };
+  }
+
+  // Ultima tappa caricata
+  let lastSaved = '';
+  for(const r of Object.values(DB.results)) {
+    if(!lastSaved || r.savedAt > lastSaved) lastSaved = r.savedAt;
+  }
+
+  el.innerHTML = `
+  <div style="margin-bottom:20px">
+    <h1 style="font-family:var(--font-head);font-weight:800;font-size:32px;letter-spacing:1px">
+      CIRCUITO NAZIONALE <span style="color:var(--red)">NW STYLE 2026</span>
+    </h1>
+    <p style="color:var(--text3);margin-top:4px;font-size:13px">
+      ${lastSaved ? 'Ultimo aggiornamento: '+fmtDate(lastSaved) : 'Nessun dato caricato'}
+      &nbsp;·&nbsp; ASD monitorata: <strong style="color:var(--red)">${DB.settings.asdHighlight||'—'}</strong>
+    </p>
+  </div>
+
+  <div class="grid4" style="margin-bottom:20px">
+    ${['ti','nord','cs','sic'].map(cid=>{
+      const cp = circuitProgress[cid];
+      const c = CIRCUITS[cid];
+      const pct = cp.total ? Math.round(cp.loaded/cp.total*100) : 0;
+      return `
+      <div class="stat-card" style="border-left:3px solid ${c.color}">
+        <div class="stat-label">${c.name}</div>
+        <div class="stat-value" style="color:${c.color}">${cp.loaded}</div>
+        <div class="stat-sub">${cp.total} classifiche totali · ${pct}%</div>
+        <div style="height:4px;background:var(--border);border-radius:2px;margin-top:8px">
+          <div style="height:4px;width:${pct}%;background:${c.color};border-radius:2px;transition:width .5s"></div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>
+
+  <div class="grid2" style="gap:16px">
+    <!-- TAPPE CALENDARIO -->
+    <div class="card">
+      <div class="card-title">📅 Calendario Tappe</div>
+      ${STAGES.filter(s=>s.id!=='san-dona').map(s=>{
+        const loaded = CATEGORIES.filter(c=>hasResult(s.id,c.id)).length;
+        const isJolly = s.jollyFor.length>0;
+        const circuitCls = s.circuits.includes('ti') ? 'ti' : s.circuits[0];
+        return `
+        <div class="tappa-item ${circuitCls}-accent" style="border-left-color:${CIRCUITS[circuitCls]?.color||'var(--border)'}">
+          <div class="tappa-date">${fmtDateShort(s.date)}</div>
+          <div style="flex:1">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span class="tappa-name">${s.name}</span>
+              ${isJolly?'<span class="badge badge-jolly">JOLLY</span>':''}
+              ${s.label==='Tappa Italia'?'<span class="badge badge-ti">TAPPA ITALIA</span>':''}
+            </div>
+            <div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">
+              ${CATEGORIES.map(c=>`
+                <span style="width:9px;height:9px;border-radius:2px;display:inline-block;
+                  background:${hasResult(s.id,c.id)?'var(--green)':'var(--border)'}" title="${c.name}"></span>
+              `).join('')}
+              <span style="font-size:11px;color:var(--text3);margin-left:4px">${loaded}/7 cat.</span>
+            </div>
+          </div>
+          ${loaded>0?`<button class="btn btn-ghost btn-sm" onclick="goToUploadStage('${s.id}')">+ Cat.</button>`:'<button class="btn btn-ghost btn-sm" onclick="goToUploadStage(\''+s.id+'\')">Carica</button>'}
+        </div>`;
+      }).join('')}
+      <div class="tappa-item" style="border-left-color:var(--fin);background:rgba(230,51,41,.05)">
+        <div class="tappa-date">18 ott</div>
+        <div style="flex:1">
+          <div style="font-family:var(--font-head);font-weight:800;font-size:16px;color:var(--red)">🏆 FINALISSIMA</div>
+          <div style="font-size:12px;color:var(--text3)">S. Donà di Piave</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- QUICK STATS CIRCUITO NORD -->
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="card" style="border-left:3px solid var(--nord)">
+        <div class="card-title" style="color:var(--nord)">⚡ Circuito Nord – Top 3 per categoria</div>
+        ${CATEGORIES.map(cat=>{
+          const standings = getCircuitStandings('nord', cat.id).slice(0,3);
+          if(standings.length===0) return `<div style="margin-bottom:10px"><span style="font-size:12px;color:var(--text3)">${cat.name}: nessun dato</span></div>`;
+          return `
+          <div style="margin-bottom:12px">
+            <div style="font-size:11px;font-weight:600;color:var(--nord);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">${cat.name}</div>
+            ${standings.map((a,i)=>`
+              <div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid rgba(42,61,92,.3)">
+                <span class="pos-badge pos-${i<3?i+1:'other'}" style="font-size:11px;width:20px;height:20px">${i+1}</span>
+                <span style="flex:1;font-size:12px;${isASD(a.assoc)?'color:var(--red);font-weight:600':''}">${a.display}</span>
+                <span class="pts" style="font-size:14px">${a.total.toFixed(1)}</span>
+              </div>
+            `).join('')}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
+function goToUploadStage(stageId) {
+  uploadState.stage = stageId;
+  showTab('upload');
+}
+
+// ═══════════════════════════════════════════
+// CARICA TAPPA
+// ═══════════════════════════════════════════
+
+function renderUpload() {
+  const el = document.getElementById('view-upload');
+  const stageOptions = STAGES.filter(s=>s.id!=='san-dona').map(s=>{
+    const c = CIRCUITS[s.circuits.includes('ti')?'ti':s.circuits[0]];
+    return `<option value="${s.id}" ${uploadState.stage===s.id?'selected':''}>[${s.label}] ${s.name} — ${fmtDateShort(s.date)}</option>`;
+  }).join('');
+  const catOptions = CATEGORIES.map(c=>`<option value="${c.id}" ${uploadState.cat===c.id?'selected':''}>${c.name}</option>`).join('');
+
+  el.innerHTML = `
+  <div style="max-width:700px;margin:0 auto">
+    <h2 style="font-family:var(--font-head);font-weight:800;font-size:28px;margin-bottom:20px">
+      CARICA <span style="color:var(--ti)">RISULTATI TAPPA</span>
+    </h2>
+    
+    ${!DB.settings.apiKey ? `
+    <div class="alert alert-warn">⚠️ API Key Anthropic non configurata. Vai su <strong>Impostazioni</strong> per inserirla.</div>` : ''}
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">1. Seleziona tappa e categoria</div>
+      <div class="grid2">
+        <div class="form-group">
+          <label>Tappa</label>
+          <select id="sel-stage" onchange="uploadState.stage=this.value;checkExisting()">
+            <option value="">— seleziona —</option>
+            ${stageOptions}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Categoria</label>
+          <select id="sel-cat" onchange="uploadState.cat=this.value;checkExisting()">
+            <option value="">— seleziona —</option>
+            ${catOptions}
+          </select>
+        </div>
+      </div>
+      <div id="existing-warn"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">2. Carica immagine classifica</div>
+      <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()"
+        ondragover="event.preventDefault();this.classList.add('dragover')"
+        ondragleave="this.classList.remove('dragover')"
+        ondrop="handleDrop(event)">
+        <input type="file" id="file-input" accept="image/*" onchange="handleFileSelect(this.files[0])">
+        <div class="upload-icon">📸</div>
+        <p>Trascina qui l'immagine JPG della classifica<br>oppure <strong>clicca per selezionare</strong></p>
+      </div>
+      <div id="upload-preview" style="margin-top:16px"></div>
+      <div id="ocr-status" style="margin-top:16px"></div>
+    </div>
+  </div>`;
+  
+  checkExisting();
+}
+
+function checkExisting() {
+  const stageId = document.getElementById('sel-stage')?.value;
+  const catId = document.getElementById('sel-cat')?.value;
+  const warn = document.getElementById('existing-warn');
+  if(!warn) return;
+  if(stageId && catId && hasResult(stageId,catId)) {
+    warn.innerHTML = `<div class="alert alert-warn">⚠️ Esiste già un risultato per questa tappa/categoria. Il nuovo caricamento <strong>sovrascriverà</strong> i dati esistenti.</div>`;
+  } else {
+    warn.innerHTML = '';
+  }
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if(file) handleFileSelect(file);
+}
+
+function handleFileSelect(file) {
+  if(!file) return;
+  const stageId = document.getElementById('sel-stage').value;
+  const catId = document.getElementById('sel-cat').value;
+  
+  if(!stageId || !catId) {
+    document.getElementById('ocr-status').innerHTML = `<div class="alert alert-err">❌ Seleziona prima tappa e categoria.</div>`;
+    return;
+  }
+  if(!DB.settings.apiKey) {
+    document.getElementById('ocr-status').innerHTML = `<div class="alert alert-err">❌ API Key mancante. Configurala nelle Impostazioni.</div>`;
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    const base64 = e.target.result.split(',')[1];
+    const preview = document.getElementById('upload-preview');
+    preview.innerHTML = `<img src="data:image/jpeg;base64,${base64}" style="max-width:100%;max-height:250px;border-radius:8px;border:1px solid var(--border)">`;
+    runOCR(base64, stageId, catId);
+  };
+  reader.readAsDataURL(file);
+}
+
+async function runOCR(base64, stageId, catId) {
+  const status = document.getElementById('ocr-status');
+  const cat = CATEGORIES.find(c=>c.id===catId);
+  status.innerHTML = `<div class="status-loading"><div class="spinner"></div><p style="margin-top:12px;color:var(--text2)">Estrazione dati OCR in corso…</p></div>`;
+
+  const isCoppia = cat.type==='coppia';
+  const promptTxt = isCoppia
+    ? `Analizza questa classifica di Nordic Walking. È una classifica A COPPIE. Estrai tutti i dati e rispondi SOLO con un array JSON (nessun markdown, nessuna spiegazione, solo il JSON puro):
+[{"pos":1,"p1":"Cognome Nome","p2":"Cognome Nome","assoc":"Nome ASD","tot":195,"pts":"195,3340876"}]
+IMPORTANTE: mantieni la virgola come separatore decimale nei punti. Includi TUTTE le righe visibili.`
+    : `Analizza questa classifica di Nordic Walking. È una classifica INDIVIDUALE. Estrai tutti i dati e rispondi SOLO con un array JSON (nessun markdown, nessuna spiegazione, solo il JSON puro):
+[{"pos":1,"cognome":"Cognome","nome":"Nome","assoc":"Nome ASD","tot":195,"pts":"195,3340876"}]
+IMPORTANTE: mantieni la virgola come separatore decimale nei punti. Includi TUTTE le righe visibili.`;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'x-api-key': DB.settings.apiKey,
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true'
+      },
+      body: JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:2000,
+        messages:[{
+          role:'user',
+          content:[
+            { type:'image', source:{ type:'base64', media_type:'image/jpeg', data:base64 } },
+            { type:'text', text:promptTxt }
+          ]
+        }]
+      })
+    });
+
+    if(!resp.ok) {
+      const err = await resp.json();
+      throw new Error(err.error?.message || `HTTP ${resp.status}`);
+    }
+
+    const data = await resp.json();
+    const text = data.content?.[0]?.text || '';
+    let cleaned = text.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+    // Find JSON array
+    const start = cleaned.indexOf('[');
+    const end = cleaned.lastIndexOf(']');
+    if(start<0||end<0) throw new Error('JSON non trovato nella risposta');
+    const rows = JSON.parse(cleaned.substring(start,end+1));
+    
+    status.innerHTML = `<div class="alert alert-ok">✅ ${rows.length} righe estratte. Verifica e correggi se necessario, poi conferma.</div>`;
+    showReviewModal(rows, stageId, catId);
+
+  } catch(e) {
+    status.innerHTML = `<div class="alert alert-err">❌ Errore OCR: ${e.message}</div>`;
+  }
+}
+
+// ═══════════════════════════════════════════
+// MODAL REVISIONE OCR
+// ═══════════════════════════════════════════
+
+let _pendingRows = [];
+let _pendingStage = '';
+let _pendingCat = '';
+
+function showReviewModal(rows, stageId, catId) {
+  _pendingRows = JSON.parse(JSON.stringify(rows));
+  _pendingStage = stageId;
+  _pendingCat = catId;
+  
+  const stage = STAGES.find(s=>s.id===stageId);
+  const cat = CATEGORIES.find(c=>c.id===catId);
+  const isCoppia = cat.type==='coppia';
+  
+  document.getElementById('modal-title').textContent = `Revisione: ${stage.name} – ${cat.name}`;
+  document.getElementById('modal-body').innerHTML = buildReviewTable(rows, isCoppia);
+  document.getElementById('modal-footer').innerHTML = `
+    <button class="btn btn-secondary" onclick="closeModal()">Annulla</button>
+    <button class="btn btn-primary" onclick="confirmSave()">✅ Conferma e Salva</button>
+  `;
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function buildReviewTable(rows, isCoppia) {
+  if(isCoppia) {
+    return `
+    <p style="color:var(--text2);font-size:12px;margin-bottom:12px">Clicca su qualsiasi cella per modificarla. Controlla nomi e punteggi.</p>
+    <div class="tbl-wrap">
+    <table>
+      <thead><tr>
+        <th style="width:40px">POS</th>
+        <th>Partecipante 1</th>
+        <th>Partecipante 2</th>
+        <th>Associazione</th>
+        <th>Tot. Giudici</th>
+        <th>Punti Classifica</th>
+        <th></th>
+      </tr></thead>
+      <tbody id="review-body">
+        ${rows.map((r,i)=>`
+        <tr>
+          <td><input class="edit-cell" style="width:40px" value="${r.pos||i+1}" onchange="_pendingRows[${i}].pos=+this.value"></td>
+          <td><input class="edit-cell" value="${r.p1||''}" onchange="_pendingRows[${i}].p1=this.value"></td>
+          <td><input class="edit-cell" value="${r.p2||''}" onchange="_pendingRows[${i}].p2=this.value"></td>
+          <td><input class="edit-cell" value="${r.assoc||''}" onchange="_pendingRows[${i}].assoc=this.value"></td>
+          <td><input class="edit-cell" style="width:60px" value="${r.tot||''}" onchange="_pendingRows[${i}].tot=+this.value"></td>
+          <td><input class="edit-cell" style="width:100px" value="${r.pts||''}" onchange="_pendingRows[${i}].pts=this.value"></td>
+          <td><span class="row-delete" onclick="deleteReviewRow(${i})">🗑</span></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    </div>
+    <button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="addReviewRow()">+ Aggiungi riga</button>`;
+  } else {
+    return `
+    <p style="color:var(--text2);font-size:12px;margin-bottom:12px">Clicca su qualsiasi cella per modificarla. Controlla nomi e punteggi.</p>
+    <div class="tbl-wrap">
+    <table>
+      <thead><tr>
+        <th style="width:40px">POS</th>
+        <th>Cognome</th>
+        <th>Nome</th>
+        <th>Associazione</th>
+        <th>Tot. Giudici</th>
+        <th>Punti Classifica</th>
+        <th></th>
+      </tr></thead>
+      <tbody id="review-body">
+        ${rows.map((r,i)=>`
+        <tr>
+          <td><input class="edit-cell" style="width:40px" value="${r.pos||i+1}" onchange="_pendingRows[${i}].pos=+this.value"></td>
+          <td><input class="edit-cell" value="${r.cognome||''}" onchange="_pendingRows[${i}].cognome=this.value"></td>
+          <td><input class="edit-cell" value="${r.nome||''}" onchange="_pendingRows[${i}].nome=this.value"></td>
+          <td><input class="edit-cell" value="${r.assoc||''}" onchange="_pendingRows[${i}].assoc=this.value"></td>
+          <td><input class="edit-cell" style="width:60px" value="${r.tot||''}" onchange="_pendingRows[${i}].tot=+this.value"></td>
+          <td><input class="edit-cell" style="width:100px" value="${r.pts||''}" onchange="_pendingRows[${i}].pts=this.value"></td>
+          <td><span class="row-delete" onclick="deleteReviewRow(${i})">🗑</span></td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    </div>
+    <button class="btn btn-ghost btn-sm" style="margin-top:12px" onclick="addReviewRow()">+ Aggiungi riga</button>`;
+  }
+}
+
+function deleteReviewRow(i) {
+  _pendingRows.splice(i,1);
+  const cat = CATEGORIES.find(c=>c.id===_pendingCat);
+  document.getElementById('modal-body').innerHTML = buildReviewTable(_pendingRows, cat.type==='coppia');
+}
+
+function addReviewRow() {
+  const cat = CATEGORIES.find(c=>c.id===_pendingCat);
+  const isCoppia = cat.type==='coppia';
+  _pendingRows.push(isCoppia
+    ? {pos:_pendingRows.length+1,p1:'',p2:'',assoc:'',tot:0,pts:'0'}
+    : {pos:_pendingRows.length+1,cognome:'',nome:'',assoc:'',tot:0,pts:'0'});
+  document.getElementById('modal-body').innerHTML = buildReviewTable(_pendingRows, isCoppia);
+}
+
+function confirmSave() {
+  // Sync current input values
+  const inputs = document.querySelectorAll('#review-body input.edit-cell');
+  const cat = CATEGORIES.find(c=>c.id===_pendingCat);
+  const isCoppia = cat.type==='coppia';
+  const cols = isCoppia ? ['pos','p1','p2','assoc','tot','pts'] : ['pos','cognome','nome','assoc','tot','pts'];
+  const rowCount = _pendingRows.length;
+  for(let i=0;i<rowCount;i++) {
+    for(let j=0;j<cols.length;j++) {
+      const idx = i*cols.length+j;
+      if(inputs[idx]) {
+        const v = inputs[idx].value;
+        if(cols[j]==='pos'||cols[j]==='tot') _pendingRows[i][cols[j]] = +v;
+        else _pendingRows[i][cols[j]] = v;
+      }
+    }
+  }
+  
+  saveResult(_pendingStage, _pendingCat, _pendingRows);
+  closeModal();
+  
+  const status = document.getElementById('ocr-status');
+  if(status) status.innerHTML = `<div class="alert alert-ok">✅ Salvati ${_pendingRows.length} risultati per ${STAGES.find(s=>s.id===_pendingStage)?.name} – ${CATEGORIES.find(c=>c.id===_pendingCat)?.name}</div>`;
+  
+  // Update dashboard if visible
+  if(activeTab==='dashboard') renderDashboard();
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+// ═══════════════════════════════════════════
+// CLASSIFICHE
+// ═══════════════════════════════════════════
+
+function renderClassifiche() {
+  const el = document.getElementById('view-classifiche');
+  const { circuit, cat } = classifState;
+  
+  el.innerHTML = `
+  <h2 style="font-family:var(--font-head);font-weight:800;font-size:28px;margin-bottom:16px">
+    CLASSIFICHE <span style="color:var(--red)">CIRCUITO</span>
+  </h2>
+
+  <!-- Circuito selector -->
+  <div class="tab-group">
+    ${['ti','nord','cs','sic'].map(cid=>`
+    <button class="tab-btn ${cid} ${circuit===cid?'active':''}" onclick="classifState.circuit='${cid}';renderClassifiche()">
+      ${CIRCUITS[cid].name}
+    </button>`).join('')}
+  </div>
+
+  <!-- Categoria selector -->
+  <div class="tab-group">
+    ${CATEGORIES.map(c=>`
+    <button class="tab-btn ${circuit} ${cat===c.id?'active':''}" onclick="classifState.cat='${c.id}';renderClassifiche()">
+      ${c.name}
+    </button>`).join('')}
+  </div>
+
+  <!-- Export bar -->
+  <div class="export-bar">
+    <button class="btn btn-ghost btn-sm" onclick="exportCSV()">📥 CSV</button>
+    <button class="btn btn-ghost btn-sm" onclick="exportExcelFn()">📊 Excel</button>
+    <button class="btn btn-ghost btn-sm" onclick="exportImageFn()">🖼️ Immagine</button>
+    <button class="btn btn-ghost btn-sm" onclick="exportPDFFn()">📄 PDF</button>
+    <span style="color:var(--text3);font-size:12px;margin-left:auto">
+      <span style="background:var(--red);width:10px;height:10px;display:inline-block;border-radius:2px;vertical-align:middle"></span>
+      ${DB.settings.asdHighlight}
+    </span>
+  </div>
+
+  <!-- Standing table -->
+  <div class="card" id="export-table-wrap">
+    ${buildStandingTable(circuit, cat)}
+  </div>
+
+  <!-- Per-stage breakdown -->
+  <div style="margin-top:20px">
+    ${buildStageBreakdown(circuit, cat)}
+  </div>`;
+}
+
+function buildStandingTable(circuitId, catId) {
+  const c = CIRCUITS[circuitId];
+  const cat = CATEGORIES.find(c=>c.id===catId);
+  const stage = STAGES.find(s=>s.id==='bologna-ti');
+  const rows = getCircuitStandings(circuitId, catId);
+  const isCoppia = cat.type==='coppia';
+  
+  if(rows.length===0) {
+    return `
+    <div style="text-align:center;padding:40px;color:var(--text3)">
+      <div style="font-size:32px;margin-bottom:12px">📭</div>
+      <p>Nessun dato disponibile per <strong>${cat.name}</strong> – ${c.name}</p>
+      <p style="font-size:12px;margin-top:8px">Carica i risultati dalla tab "Carica Tappa"</p>
+    </div>`;
+  }
+
+  const qualLimit = QUAL_LIMITS[circuitId]?.[catId] || QUAL_LIMITS[circuitId]?.default;
+  // Get all stages for this circuit to show columns
+  const circStages = STAGES.filter(s=>s.circuits.includes(circuitId) && s.id!=='san-dona');
+
+  return `
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+    <span class="badge badge-${circuitId==='cs'?'cs':circuitId}">${c.name}</span>
+    <span style="font-family:var(--font-head);font-weight:700;font-size:18px">${cat.name}</span>
+    ${qualLimit?`<span style="font-size:12px;color:var(--text3);margin-left:auto">Qualificazione Finalissima: top <strong>${qualLimit}</strong></span>`:''}
+  </div>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr>
+      <th style="width:50px">POS</th>
+      ${isCoppia?'<th>Coppia</th>':'<th>Atleta</th>'}
+      <th>ASD</th>
+      <th>Tappe</th>
+      ${circStages.map(s=>`<th style="font-size:10px;text-align:center" title="${s.name}">${s.name.substring(0,7)}${s.jollyFor.includes(circuitId)?'<br><span style="color:var(--red2)">J</span>':''}</th>`).join('')}
+      <th>TOTALE</th>
+    </tr></thead>
+    <tbody>
+      ${rows.map((r,i)=>{
+        const highlight = isASD(r.assoc) ? 'highlight-asd' : '';
+        const qualCls = qualLimit && i<qualLimit ? 'qual-yes' : (qualLimit?'qual-no':'');
+        const stagePoints = circStages.map(s=>{
+          const sp = r.stages.find(x=>x.stageId===s.id);
+          if(!sp) return `<td style="text-align:center;color:var(--text3)">—</td>`;
+          return `<td style="text-align:center">
+            <span style="font-size:12px${sp.isJolly?';color:var(--red2);font-weight:700':''}">${sp.ptsUsed.toFixed(1)}${sp.isJolly?'<span title="Jolly">★</span>':''}</span>
+          </td>`;
+        }).join('');
+        return `
+        <tr class="${highlight}">
+          <td>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span class="pos-badge pos-${i<3?i+1:'other'}">${i+1}</span>
+              ${qualLimit?`<span class="${qualCls}">${i<qualLimit?'Q':''}` :''}${qualLimit?'</span>':''}
+            </div>
+          </td>
+          <td style="font-weight:${isASD(r.assoc)?'600':'400'}">${r.display}</td>
+          <td style="color:${isASD(r.assoc)?'var(--red)':'var(--text2)'};font-size:12px">${r.assoc}</td>
+          <td style="text-align:center;color:var(--text3)">${r.stages.length}</td>
+          ${stagePoints}
+          <td><span class="pts" style="color:${CIRCUITS[circuitId].color}">${r.total.toFixed(3)}</span></td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>
+  </div>
+  <div style="margin-top:12px;font-size:11px;color:var(--text3)">
+    ★ = Tappa Jolly (punti raddoppiati) · 
+    <span style="background:rgba(230,51,41,.2);padding:1px 6px;border-radius:3px">${DB.settings.asdHighlight}</span> evidenziata in rosso
+  </div>`;
+}
+
+function buildStageBreakdown(circuitId, catId) {
+  const circStages = STAGES.filter(s=>s.circuits.includes(circuitId) && s.id!=='san-dona');
+  const cat = CATEGORIES.find(c=>c.id===catId);
+  const isCoppia = cat.type==='coppia';
+  const loaded = circStages.filter(s=>hasResult(s.id,catId));
+  
+  if(loaded.length===0) return '';
+  
+  return `
+  <div class="card">
+    <div class="card-title">📋 Dettaglio per tappa</div>
+    <div class="tab-group" id="stage-tabs">
+      ${loaded.map((s,i)=>`
+      <button class="tab-btn ${CIRCUITS[circuitId].cls} ${i===0?'active':''}" 
+        onclick="showStageDetail(this,'stage-detail-${s.id}')">
+        ${s.name}${s.jollyFor.includes(circuitId)?' ⭐':''}
+      </button>`).join('')}
+    </div>
+    ${loaded.map((s,i)=>{
+      const res = getResult(s.id,catId);
+      return `
+      <div id="stage-detail-${s.id}" style="display:${i===0?'block':'none'}">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+          <span style="font-size:12px;color:var(--text3)">${fmtDateShort(s.date)}</span>
+          ${s.jollyFor.includes(circuitId)?'<span class="badge badge-jolly">JOLLY – punti x2</span>':''}
+          <span style="font-size:12px;color:var(--text3);margin-left:auto">Salvato: ${fmtDate(res.savedAt)}</span>
+        </div>
+        <div class="tbl-wrap">
+        <table>
+          <thead><tr>
+            <th>POS</th>
+            ${isCoppia?'<th>P1</th><th>P2</th>':'<th>Cognome</th><th>Nome</th>'}
+            <th>ASD</th>
+            <th>Tot. Giudici</th>
+            <th>Punti Classifica</th>
+          </tr></thead>
+          <tbody>
+            ${res.rows.map(r=>`
+            <tr class="${isASD(r.assoc)?'highlight-asd':''}">
+              <td><span class="pos-badge pos-${r.pos<4?r.pos:'other'}">${r.pos}</span></td>
+              ${isCoppia?`<td>${r.p1||''}</td><td>${r.p2||''}</td>`:`<td>${r.cognome||''}</td><td>${r.nome||''}</td>`}
+              <td style="font-size:12px;color:${isASD(r.assoc)?'var(--red)':'var(--text2)'}">${r.assoc||''}</td>
+              <td class="tot">${r.tot||''}</td>
+              <td class="pts">${r.pts||''}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+function showStageDetail(btn, id) {
+  btn.closest('.card').querySelectorAll('[id^="stage-detail-"]').forEach(d=>d.style.display='none');
+  btn.closest('.card').querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById(id).style.display='block';
+  btn.classList.add('active');
+}
+
+function isASD(assoc) {
+  if(!DB.settings.asdHighlight||!assoc) return false;
+  return assoc.toLowerCase().includes(DB.settings.asdHighlight.toLowerCase());
+}
+
+// ═══════════════════════════════════════════
+// FINALISSIMA
+// ═══════════════════════════════════════════
+
+function renderFinalissima() {
+  const el = document.getElementById('view-finalissima');
+  const { circuit, cat } = finState;
+  
+  el.innerHTML = `
+  <h2 style="font-family:var(--font-head);font-weight:800;font-size:28px;margin-bottom:16px">
+    TRACKER <span style="color:var(--yellow)">FINALISSIMA</span>
+  </h2>
+  <div class="alert alert-info" style="margin-bottom:20px">
+    ℹ️ Nord/Centro-Sud: Top 10 per categoria (Camminatrici F: top 15). Sicilia: Top 5 (Camminatrici F: top 10). I punti si sommano tra tappe; la Tappa Italia vale per tutti i circuiti.
+  </div>
+  
+  <div class="tab-group">
+    ${['nord','cs','sic'].map(cid=>`
+    <button class="tab-btn ${cid} ${circuit===cid?'active':''}" onclick="finState.circuit='${cid}';renderFinalissima()">
+      ${CIRCUITS[cid].name}
+    </button>`).join('')}
+  </div>
+  
+  <div class="tab-group">
+    ${CATEGORIES.map(c=>`
+    <button class="tab-btn ${circuit} ${cat===c.id?'active':''}" onclick="finState.cat='${c.id}';renderFinalissima()">
+      ${c.name}
+    </button>`).join('')}
+  </div>
+
+  <div class="card">
+    ${buildFinalissimaTable(circuit, cat)}
+  </div>
+
+  <!-- Summary: all circuits, ASD only -->
+  ${buildASDSummary()}`;
+}
+
+function buildFinalissimaTable(circuitId, catId) {
+  const rows = getCircuitStandings(circuitId, catId);
+  const c = CIRCUITS[circuitId];
+  const cat = CATEGORIES.find(c=>c.id===catId);
+  const qualLimit = QUAL_LIMITS[circuitId]?.[catId] || QUAL_LIMITS[circuitId]?.default;
+  const isCoppia = cat.type==='coppia';
+
+  if(rows.length===0) {
+    return `<div class="status-empty">Nessun dato per ${c.name} – ${cat.name}</div>`;
+  }
+
+  return `
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
+    <span class="badge badge-${circuitId==='cs'?'cs':circuitId}">${c.name}</span>
+    <span style="font-family:var(--font-head);font-weight:700;font-size:18px">${cat.name}</span>
+    <span style="margin-left:auto;font-size:12px;color:var(--text3)">Accesso finalissima: top <strong style="color:var(--yellow)">${qualLimit}</strong></span>
+  </div>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr>
+      <th>POS</th>
+      <th>${isCoppia?'Coppia':'Atleta'}</th>
+      <th>ASD</th>
+      <th>Tappe</th>
+      <th>Totale</th>
+      <th>Finalissima</th>
+    </tr></thead>
+    <tbody>
+    ${rows.map((r,i)=>`
+    <tr class="${isASD(r.assoc)?'highlight-asd':''}">
+      <td><span class="pos-badge pos-${i<3?i+1:'other'}">${i+1}</span></td>
+      <td style="font-weight:${isASD(r.assoc)?'600':'400'}">${r.display}</td>
+      <td style="font-size:12px;color:${isASD(r.assoc)?'var(--red)':'var(--text2)'}">${r.assoc}</td>
+      <td style="text-align:center;color:var(--text3)">${r.stages.length}</td>
+      <td class="pts" style="color:${c.color}">${r.total.toFixed(3)}</td>
+      <td>${i<qualLimit
+        ? '<span class="qual-yes">✅ QUALIFICATO</span>'
+        : i<qualLimit+5 ? '<span class="qual-maybe">⏳ IN ZONA</span>'
+        : '<span class="qual-no">—</span>'
+      }</td>
+    </tr>`).join('')}
+    </tbody>
+  </table>
+  </div>`;
+}
+
+function buildASDSummary() {
+  const asd = DB.settings.asdHighlight;
+  if(!asd) return '';
+  
+  let found = [];
+  for(const cid of ['nord','cs','sic']) {
+    for(const cat of CATEGORIES) {
+      const rows = getCircuitStandings(cid, cat.id);
+      const qualLimit = QUAL_LIMITS[cid]?.[cat.id] || QUAL_LIMITS[cid]?.default;
+      const myAthletes = rows.filter(r=>isASD(r.assoc));
+      myAthletes.forEach(r=>found.push({...r, circuit:CIRCUITS[cid].name, circuitId:cid, category:cat.name, qualLimit}));
+    }
+  }
+
+  if(found.length===0) return `
+  <div class="card" style="margin-top:20px;border-left:3px solid var(--red)">
+    <div class="card-title">🔴 ${asd} – Riepilogo</div>
+    <div class="status-empty">Nessun atleta di ${asd} trovato nei dati caricati.</div>
+  </div>`;
+
+  return `
+  <div class="card" style="margin-top:20px;border-left:3px solid var(--red)">
+    <div class="card-title">🔴 ${asd} – Stato Qualificazione</div>
+    <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Atleta</th><th>Circuito</th><th>Categoria</th><th>POS</th><th>Totale</th><th>Finalissima</th></tr></thead>
+      <tbody>
+        ${found.map(r=>`
+        <tr class="highlight-asd">
+          <td style="font-weight:600">${r.display}</td>
+          <td><span class="badge badge-${r.circuitId==='cs'?'cs':r.circuitId}">${r.circuit}</span></td>
+          <td style="font-size:12px">${r.category}</td>
+          <td><span class="pos-badge pos-${r.pos<4?r.pos:'other'}">${r.pos}</span></td>
+          <td class="pts">${r.total.toFixed(3)}</td>
+          <td>${r.pos<=r.qualLimit?'<span class="qual-yes">✅ QUALIFICATO</span>':r.pos<=r.qualLimit+5?'<span class="qual-maybe">⏳ IN ZONA</span>':'<span class="qual-no">—</span>'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    </div>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════
+// IMPOSTAZIONI
+// ═══════════════════════════════════════════
+
+function renderSettings() {
+  const el = document.getElementById('view-settings');
+  el.innerHTML = `
+  <div style="max-width:600px">
+    <h2 style="font-family:var(--font-head);font-weight:800;font-size:28px;margin-bottom:20px">
+      ⚙️ <span style="color:var(--sic)">IMPOSTAZIONI</span>
+    </h2>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">🔑 API Key Anthropic</div>
+      <div class="form-group">
+        <label>API Key (necessaria per OCR automatico)</label>
+        <input type="password" id="set-apikey" value="${DB.settings.apiKey||''}" placeholder="sk-ant-...">
+      </div>
+      <div class="alert alert-warn" style="font-size:12px">
+        ⚠️ La chiave viene salvata solo nel browser locale (localStorage). Non viene inviata a nessun server diverso da Anthropic per l'OCR.
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-title">🏃 ASD da evidenziare</div>
+      <div class="form-group">
+        <label>Nome ASD (ricerca parziale)</label>
+        <input type="text" id="set-asd" value="${DB.settings.asdHighlight||''}" placeholder="es. Sile Walking">
+      </div>
+    </div>
+
+    <button class="btn btn-primary" onclick="saveSettings()">💾 Salva impostazioni</button>
+    
+    <div class="divider"></div>
+    
+    <div class="card" style="border-color:rgba(230,51,41,.3)">
+      <div class="card-title" style="color:var(--red2)">⚠️ Gestione dati</div>
+      <p style="color:var(--text2);font-size:13px;margin-bottom:16px">
+        Il database contiene <strong>${Object.keys(DB.results).length} classifiche</strong> salvate.<br>
+        L'export completo scarica tutto in Excel.
+      </p>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-secondary" onclick="exportFullDB()">📊 Export completo DB</button>
+        <button class="btn btn-ghost" style="color:var(--red);border-color:var(--red)" onclick="confirmReset()">🗑️ Cancella tutti i dati</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function saveSettings() {
+  DB.settings.apiKey = document.getElementById('set-apikey').value.trim();
+  DB.settings.asdHighlight = document.getElementById('set-asd').value.trim();
+  saveDB();
+  const btn = document.querySelector('#view-settings .btn-primary');
+  btn.textContent = '✅ Salvato!';
+  setTimeout(()=>{ btn.textContent='💾 Salva impostazioni'; },2000);
+}
+
+function confirmReset() {
+  if(confirm('Sei sicuro? Tutti i dati delle classifiche verranno cancellati. Questa operazione non è reversibile.')) {
+    DB.results = {};
+    saveDB();
+    renderSettings();
+  }
+}
+
+// ═══════════════════════════════════════════
+// EXPORT FUNCTIONS
+// ═══════════════════════════════════════════
+
+function exportCSV() {
+  const { circuit, cat } = classifState;
+  const rows = getCircuitStandings(circuit, cat);
+  const catObj = CATEGORIES.find(c=>c.id===cat);
+  const isCoppia = catObj.type==='coppia';
+  
+  const header = isCoppia
+    ? ['POS','Coppia','Associazione','Tappe','Totale Punti']
+    : ['POS','Atleta','Associazione','Tappe','Totale Punti'];
+  const lines = [header.join(';')];
+  rows.forEach(r=>lines.push([
+    r.pos,
+    r.display,
+    r.assoc,
+    r.stages.length,
+    r.total.toFixed(3).replace('.',',')
+  ].join(';')));
+  
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url;
+  a.download = `NWS2026_${CIRCUITS[circuit].name}_${catObj.name}.csv`;
+  a.click(); URL.revokeObjectURL(url);
+}
+
+function exportExcelFn() {
+  const { circuit, cat } = classifState;
+  const rows = getCircuitStandings(circuit, cat);
+  const catObj = CATEGORIES.find(c=>c.id===cat);
+  const isCoppia = catObj.type==='coppia';
+  
+  const wsData = [[
+    'POS', isCoppia?'Coppia':'Atleta', 'Associazione','Tappe','Totale Punti',
+    ...STAGES.filter(s=>s.circuits.includes(circuit)&&s.id!=='san-dona').map(s=>s.name+(s.jollyFor.includes(circuit)?'(J)':''))
+  ]];
+  
+  rows.forEach(r=>{
+    const stagePts = STAGES.filter(s=>s.circuits.includes(circuit)&&s.id!=='san-dona')
+      .map(s=>{ const sp=r.stages.find(x=>x.stageId===s.id); return sp?sp.ptsUsed:''; });
+    wsData.push([r.pos,r.display,r.assoc,r.stages.length,+r.total.toFixed(3),...stagePts]);
+  });
+  
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = [8,30,30,8,14,...STAGES.filter(s=>s.circuits.includes(circuit)&&s.id!=='san-dona').map(()=>12)].map(w=>({wch:w}));
+  XLSX.utils.book_append_sheet(wb, ws, catObj.name.substring(0,31));
+  XLSX.writeFile(wb, `NWS2026_${CIRCUITS[circuit].name.replace(/\s/g,'_')}_${catObj.name.replace(/\s/g,'_')}.xlsx`);
+}
+
+async function exportImageFn() {
+  const el = document.getElementById('export-table-wrap');
+  if(!el||typeof html2canvas==='undefined') return alert('html2canvas non disponibile');
+  const canvas = await html2canvas(el, { backgroundColor:'#131929', scale:2 });
+  const a = document.createElement('a');
+  a.href = canvas.toDataURL('image/png');
+  a.download = `NWS2026_${CIRCUITS[classifState.circuit].name}_${CATEGORIES.find(c=>c.id===classifState.cat)?.name}_${new Date().toISOString().split('T')[0]}.png`;
+  a.click();
+}
+
+async function exportPDFFn() {
+  const el = document.getElementById('export-table-wrap');
+  if(!el||typeof html2canvas==='undefined'||typeof jspdf==='undefined') return alert('Libreria non disponibile');
+  const canvas = await html2canvas(el, { backgroundColor:'#131929', scale:2 });
+  const { jsPDF } = jspdf;
+  const pdf = new jsPDF({ orientation:'landscape', unit:'mm', format:'a4' });
+  const w = pdf.internal.pageSize.getWidth();
+  const h = canvas.height * w / canvas.width;
+  pdf.addImage(canvas.toDataURL('image/png'),'PNG',0,0,w,h);
+  pdf.save(`NWS2026_${CIRCUITS[classifState.circuit].name}_${CATEGORIES.find(c=>c.id===classifState.cat)?.name}_${new Date().toISOString().split('T')[0]}.pdf`);
+}
+
+function exportFullDB() {
+  const wb = XLSX.utils.book_new();
+  for(const key of Object.keys(DB.results)) {
+    const r = DB.results[key];
+    const stage = STAGES.find(s=>s.id===r.stageId);
+    const cat = CATEGORIES.find(c=>c.id===r.catId);
+    if(!stage||!cat) continue;
+    const isCoppia = cat.type==='coppia';
+    const header = isCoppia
+      ? ['POS','Partecipante1','Partecipante2','Associazione','Tot Giudici','Punti Classifica']
+      : ['POS','Cognome','Nome','Associazione','Tot Giudici','Punti Classifica'];
+    const data = [header, ...r.rows.map(row=>isCoppia
+      ? [row.pos,row.p1||'',row.p2||'',row.assoc||'',row.tot||'',row.pts||'']
+      : [row.pos,row.cognome||'',row.nome||'',row.assoc||'',row.tot||'',row.pts||''])
+    ];
+    const ws = XLSX.utils.aoa_to_sheet(data);
+    const shName = `${(stage.name||'').substring(0,15)}_${(cat.short||'').substring(0,10)}`;
+    XLSX.utils.book_append_sheet(wb, ws, shName);
+  }
+  if(wb.SheetNames.length===0) return alert('Nessun dato da esportare');
+  XLSX.writeFile(wb, `NWS2026_DB_completo_${new Date().toISOString().split('T')[0]}.xlsx`);
+}
+
+// ═══════════════════════════════════════════
+// UTILITY
+// ═══════════════════════════════════════════
+
+function fmtDate(iso) {
+  if(!iso) return '';
+  try { return new Date(iso).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
+  catch(e) { return iso; }
+}
+function fmtDateShort(iso) {
+  if(!iso) return '';
+  try { 
+    const d = new Date(iso);
+    return d.toLocaleDateString('it-IT',{day:'2-digit',month:'short'}); 
+  } catch(e){ return iso; }
+}
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+
+loadDB();
+renderDashboard();
+</script>
+</body>
+</html>
