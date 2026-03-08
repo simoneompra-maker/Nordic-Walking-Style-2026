@@ -607,7 +607,7 @@ function renderUpload() {
     </h2>
     
     ${!DB.settings.apiKey ? `
-    <div class="alert alert-warn">⚠️ API Key Anthropic non configurata. Vai su <strong>Impostazioni</strong> per inserirla.</div>` : ''}
+    <div class="alert alert-warn">⚠️ API Key Gemini non configurata. Vai su <strong>Impostazioni</strong> per inserirla.</div>` : ''}
 
     <div class="card" style="margin-bottom:16px">
       <div class="card-title">1. Seleziona tappa e categoria</div>
@@ -677,7 +677,7 @@ function handleFileSelect(file) {
     return;
   }
   if(!DB.settings.apiKey) {
-    document.getElementById('ocr-status').innerHTML = `<div class="alert alert-err">❌ API Key mancante. Configurala nelle Impostazioni.</div>`;
+    document.getElementById('ocr-status').innerHTML = `<div class="alert alert-err">❌ API Key Gemini mancante. Configurala nelle Impostazioni.</div>`;
     return;
   }
 
@@ -706,26 +706,22 @@ IMPORTANTE: mantieni la virgola come separatore decimale nei punti. Includi TUTT
 IMPORTANTE: mantieni la virgola come separatore decimale nei punti. Includi TUTTE le righe visibili.`;
 
   try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'x-api-key': DB.settings.apiKey,
-        'anthropic-version':'2023-06-01',
-        'anthropic-dangerous-direct-browser-access':'true'
-      },
-      body: JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:2000,
-        messages:[{
-          role:'user',
-          content:[
-            { type:'image', source:{ type:'base64', media_type:'image/jpeg', data:base64 } },
-            { type:'text', text:promptTxt }
-          ]
-        }]
-      })
-    });
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${DB.settings.apiKey}`,
+      {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json' },
+        body: JSON.stringify({
+          contents:[{
+            parts:[
+              { inline_data:{ mime_type:'image/jpeg', data:base64 } },
+              { text: promptTxt }
+            ]
+          }],
+          generationConfig:{ temperature:0.1, maxOutputTokens:4096 }
+        })
+      }
+    );
 
     if(!resp.ok) {
       const err = await resp.json();
@@ -733,14 +729,13 @@ IMPORTANTE: mantieni la virgola come separatore decimale nei punti. Includi TUTT
     }
 
     const data = await resp.json();
-    const text = data.content?.[0]?.text || '';
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     let cleaned = text.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
-    // Find JSON array
     const start = cleaned.indexOf('[');
     const end = cleaned.lastIndexOf(']');
     if(start<0||end<0) throw new Error('JSON non trovato nella risposta');
     const rows = JSON.parse(cleaned.substring(start,end+1));
-    
+
     status.innerHTML = `<div class="alert alert-ok">✅ ${rows.length} righe estratte. Verifica e correggi se necessario, poi conferma.</div>`;
     showReviewModal(rows, stageId, catId);
 
@@ -1211,13 +1206,13 @@ function renderSettings() {
     </h2>
 
     <div class="card" style="margin-bottom:16px">
-      <div class="card-title">🔑 API Key Anthropic</div>
+      <div class="card-title">🔑 API Key Google Gemini</div>
       <div class="form-group">
-        <label>API Key (necessaria per OCR automatico)</label>
-        <input type="password" id="set-apikey" value="${DB.settings.apiKey||''}" placeholder="sk-ant-...">
+        <label>API Key Gemini (necessaria per OCR automatico)</label>
+        <input type="password" id="set-apikey" value="${DB.settings.apiKey||''}" placeholder="AIza...">
       </div>
       <div class="alert alert-warn" style="font-size:12px">
-        ⚠️ La chiave viene salvata solo nel browser locale (localStorage). Non viene inviata a nessun server diverso da Anthropic per l'OCR.
+        ⚠️ La chiave viene salvata solo nel browser locale (localStorage). Non viene inviata a nessun server diverso da Google per l'OCR.
       </div>
     </div>
 
