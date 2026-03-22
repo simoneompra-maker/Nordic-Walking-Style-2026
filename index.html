@@ -707,7 +707,7 @@ IMPORTANTE: mantieni la virgola come separatore decimale nei punti. Includi TUTT
 
   try {
     const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${DB.settings.apiKey}`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${DB.settings.apiKey}`,
       {
         method:'POST',
         headers:{ 'Content-Type':'application/json' },
