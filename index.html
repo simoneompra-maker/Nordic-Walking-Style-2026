@@ -330,7 +330,7 @@ async function runOCRMulti(files, stageId, catId){
   var isCop=cat.type==='cop';
   var allRows=[];
   
-  status.innerHTML='<div class="sl"><div class="spin"></div><p style="margin-top:12px;color:var(--tx2)">OCR in corso per '+files.length+' immagine'+(files.length>1?'i...')+'...</p><p style="font-size:12px;color:var(--tx3);margin-top:4px" id="ocr-page-status">Pagina 1 di '+files.length+'</p></div>';
+  status.innerHTML='<div class="sl"><div class="spin"></div><p style="margin-top:12px;color:var(--tx2)">OCR in corso per '+files.length+' immagine'+(files.length>1?'i':'')+'...</p><p style="font-size:12px;color:var(--tx3);margin-top:4px" id="ocr-page-status">Pagina 1 di '+files.length+'</p></div>';
   
   for(var i=0;i<files.length;i++){
     var pageStatus=document.getElementById('ocr-page-status');
