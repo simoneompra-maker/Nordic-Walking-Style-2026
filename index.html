@@ -287,7 +287,7 @@ function renderUpload(){
     return '<option value="'+s.id+'"'+(upState.stage===s.id?' selected':'')+'>['+s.label+'] '+s.name+' &mdash; '+fmtDs(s.date)+'</option>';
   }).join('');
   var catOpts=CATS.map(function(c){return '<option value="'+c.id+'"'+(upState.cat===c.id?' selected':'')+'>'+c.name+'</option>';}).join('');
-  el.innerHTML='<div style="max-width:700px;margin:0 auto"><h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:20px">CARICA <span style="color:var(--ti)">RISULTATI TAPPA</span></h2><div class="al ai">&#x1F916; OCR via Gemini (Supabase proxy) &mdash; riconoscimento automatico ad alta precisione.</div><div class="card" style="margin-bottom:16px"><div class="ct">1. Seleziona tappa e categoria</div><div class="g2"><div class="fg"><label>Tappa</label><select id="sel-stage" onchange="upState.stage=this.value;chkExist()"><option value="">-- seleziona --</option>'+stOpts+'</select></div><div class="fg"><label>Categoria</label><select id="sel-cat" onchange="upState.cat=this.value;chkExist()"><option value="">-- seleziona --</option>'+catOpts+'</select></div></div><div id="ex-warn"></div></div><div class="card"><div class="ct">2. Carica immagine classifica</div><div class="uz" id="uz" onclick="document.getElementById(\'fi\').click()" ondragover="event.preventDefault();this.classList.add(\'dv\')" ondragleave="this.classList.remove(\'dv\')" ondrop="handleDrop(event)"><input type="file" id="fi" accept="image/*" onchange="handleFile(this.files[0])"><div style="font-size:40px;margin-bottom:12px">&#x1F4F8;</div><p style="color:var(--tx2)">Trascina l\'immagine JPG oppure <strong style="color:var(--red)">clicca per selezionare</strong></p></div><div id="up-preview" style="margin-top:16px"></div><div id="ocr-status" style="margin-top:16px"></div></div></div>';
+  el.innerHTML='<div style="max-width:700px;margin:0 auto"><h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:20px">CARICA <span style="color:var(--ti)">RISULTATI TAPPA</span></h2><div class="al ai">&#x1F916; OCR via Gemini &mdash; puoi caricare pi&#xF9; immagini per la stessa categoria (es. classifica su pi&#xF9; pagine).</div><div class="card" style="margin-bottom:16px"><div class="ct">1. Seleziona tappa e categoria</div><div class="g2"><div class="fg"><label>Tappa</label><select id="sel-stage" onchange="upState.stage=this.value;chkExist()"><option value="">-- seleziona --</option>'+stOpts+'</select></div><div class="fg"><label>Categoria</label><select id="sel-cat" onchange="upState.cat=this.value;chkExist()"><option value="">-- seleziona --</option>'+catOpts+'</select></div></div><div id="ex-warn"></div></div><div class="card"><div class="ct">2. Carica immagini classifica</div><div class="uz" id="uz" onclick="document.getElementById(\'fi\').click()" ondragover="event.preventDefault();this.classList.add(\'dv\')" ondragleave="this.classList.remove(\'dv\')" ondrop="handleDropMulti(event)"><input type="file" id="fi" accept="image/*" multiple onchange="handleFiles(this.files)"><div style="font-size:40px;margin-bottom:12px">&#x1F4F8;</div><p style="color:var(--tx2)">Trascina una o pi&#xF9; immagini JPG oppure <strong style="color:var(--red)">clicca per selezionare</strong></p><p style="font-size:12px;color:var(--tx3);margin-top:6px">Seleziona pi&#xF9; file contemporaneamente se la classifica &#xE8; su pi&#xF9; pagine</p></div><div id="up-preview" style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"></div><div id="ocr-status" style="margin-top:16px"></div></div></div>';
   chkExist();
 }
 
@@ -300,42 +300,88 @@ function chkExist(){
     ?'<div class="al aw" style="margin-top:12px;margin-bottom:0">&#x26A0;&#xFE0F; Dato gi&agrave; presente &mdash; il caricamento sovrascriver&agrave; i dati esistenti.</div>':'';
 }
 
-function handleDrop(e){e.preventDefault();document.getElementById('uz').classList.remove('dv');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);}
+function handleDropMulti(e){e.preventDefault();document.getElementById('uz').classList.remove('dv');if(e.dataTransfer.files.length)handleFiles(e.dataTransfer.files);}
 
-function handleFile(file){
-  if(!file)return;
+function handleFiles(files){
+  if(!files||!files.length)return;
   var sid=document.getElementById('sel-stage').value;
   var cid=document.getElementById('sel-cat').value;
   if(!sid||!cid){document.getElementById('ocr-status').innerHTML='<div class="al ae">&#x274C; Seleziona prima tappa e categoria.</div>';return;}
-  var reader=new FileReader();
-  reader.onload=function(e){
-    var dataUrl=e.target.result;
-    document.getElementById('up-preview').innerHTML='<img src="'+dataUrl+'" style="max-width:100%;max-height:250px;border-radius:8px;border:1px solid var(--brd)">';
-    runOCR(dataUrl,sid,cid);
-  };
-  reader.readAsDataURL(file);
+  
+  var fileArr=Array.from(files);
+  var preview=document.getElementById('up-preview');
+  preview.innerHTML='';
+  
+  // Show thumbnails
+  fileArr.forEach(function(file,i){
+    var reader=new FileReader();
+    reader.onload=function(e){
+      preview.innerHTML+='<div style="text-align:center"><img src="'+e.target.result+'" style="height:120px;border-radius:6px;border:1px solid var(--brd)"><div style="font-size:11px;color:var(--tx3);margin-top:4px">Pag. '+(i+1)+'</div></div>';
+    };
+    reader.readAsDataURL(file);
+  });
+  
+  runOCRMulti(fileArr, sid, cid);
 }
 
-function runOCR(dataUrl,stageId,catId){
+async function runOCRMulti(files, stageId, catId){
   var status=document.getElementById('ocr-status');
   var cat=CATS.find(function(c){return c.id===catId;});
   var isCop=cat.type==='cop';
-  var b64=dataUrl.split(',')[1];
-  status.innerHTML='<div class="sl"><div class="spin"></div><p style="margin-top:12px;color:var(--tx2)">OCR in corso tramite Gemini&hellip;</p><p style="font-size:12px;color:var(--tx3);margin-top:4px">Pochi secondi</p></div>';
-  fetch('https://oykewinjysrgnhdpkabs.supabase.co/functions/v1/gemini-ocr',{
+  var allRows=[];
+  
+  status.innerHTML='<div class="sl"><div class="spin"></div><p style="margin-top:12px;color:var(--tx2)">OCR in corso per '+files.length+' immagine'+(files.length>1?'i...')+'...</p><p style="font-size:12px;color:var(--tx3);margin-top:4px" id="ocr-page-status">Pagina 1 di '+files.length+'</p></div>';
+  
+  for(var i=0;i<files.length;i++){
+    var pageStatus=document.getElementById('ocr-page-status');
+    if(pageStatus) pageStatus.textContent='Pagina '+(i+1)+' di '+files.length;
+    
+    var b64=await fileToBase64(files[i]);
+    try{
+      var rows=await ocrRequest(b64, isCop);
+      // Deduplicate by pos
+      rows.forEach(function(r){
+        var exists=allRows.find(function(x){return x.pos===r.pos;});
+        if(!exists) allRows.push(r);
+      });
+    }catch(e){
+      console.error('OCR page '+(i+1)+' error:',e);
+    }
+  }
+  
+  // Sort by pos
+  allRows.sort(function(a,b){return (a.pos||0)-(b.pos||0);});
+  
+  if(!allRows.length){
+    status.innerHTML='<div class="al ae">&#x274C; Nessuna riga trovata in nessuna immagine</div>';
+    return;
+  }
+  
+  status.innerHTML='<div class="al ao">&#x2705; '+allRows.length+' righe estratte da '+files.length+' immagine'+(files.length>1?'i':'')+'. <strong>Controlla</strong> prima di confermare.</div>';
+  showModal(allRows, stageId, catId);
+}
+
+function fileToBase64(file){
+  return new Promise(function(resolve,reject){
+    var reader=new FileReader();
+    reader.onload=function(e){resolve(e.target.result.split(',')[1]);};
+    reader.onerror=reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function ocrRequest(b64, isCop){
+  var resp=await fetch('https://oykewinjysrgnhdpkabs.supabase.co/functions/v1/gemini-ocr',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({image:b64,isCoppia:isCop})
-  }).then(function(r){return r.json();}).then(function(data){
-    if(data.error) throw new Error(data.error);
-    var rows=data.rows;
-    if(!rows||!rows.length){status.innerHTML='<div class="al ae">&#x274C; Nessuna riga trovata</div>';return;}
-    status.innerHTML='<div class="al ao">&#x2705; '+rows.length+' righe estratte. <strong>Controlla</strong> nomi e punteggi prima di confermare.</div>';
-    showModal(rows,stageId,catId);
-  }).catch(function(e){
-    status.innerHTML='<div class="al ae">&#x274C; Errore OCR: '+e.message+'</div>';
   });
+  var data=await resp.json();
+  if(data.error) throw new Error(data.error);
+  return data.rows||[];
 }
+
+// runOCR replaced by runOCRMulti
 
 var ASD_KW=['ASD','NW','NORDIC','WALKING','SPORT','CAMMINO','SORRISI','AQUILE','OMNIA','ETNA','KINESIS','EVOLUZIONE','TEAM','TRIESTE','ATLETICA','MONTELLO','PIAVE','BASILICATA','MARCHE','RAGUSA','SICILIA','GORIZIA','POMEZIA','MOGLIANO','RUNNERS','FRIENDS','BENESSERE','EQUIPE','ROMACAMMINA'];
 
