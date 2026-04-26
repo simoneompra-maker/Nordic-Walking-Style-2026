@@ -95,6 +95,7 @@ tbody tr.hl:hover{background:rgba(230,51,41,.12)!important}
       <button class="nb" onclick="goTab('upload')" id="t-upload"><span class="dot" style="background:#60a5fa"></span>Carica Tappa</button>
       <button class="nb" onclick="goTab('classifiche')" id="t-classifiche"><span class="dot" style="background:#22d3ee"></span>Classifiche</button>
       <button class="nb" onclick="goTab('finalissima')" id="t-finalissima"><span class="dot" style="background:#fbbf24"></span>Finalissima</button>
+      <button class="nb" onclick="goTab('asd')" id="t-asd"><span class="dot" style="background:#34d399"></span>ASD</button>
       <button class="nb" onclick="goTab('settings')" id="t-settings"><span class="dot" style="background:#a78bfa"></span>Impostazioni</button>
     </nav>
   </header>
@@ -103,6 +104,7 @@ tbody tr.hl:hover{background:rgba(230,51,41,.12)!important}
     <div id="v-upload" style="display:none"></div>
     <div id="v-classifiche" style="display:none"></div>
     <div id="v-finalissima" style="display:none"></div>
+    <div id="v-asd" style="display:none"></div>
     <div id="v-settings" style="display:none"></div>
   </main>
 </div>
@@ -207,6 +209,11 @@ function getStandings(cirId,catId){
     var jolly=st.jollyFor.indexOf(cirId)>=0;
     for(var ri=0;ri<res.rows.length;ri++){
       var row=res.rows[ri];
+      // Filter by ASD circuit if assigned (skip for 'ti' - Tappa Italia shows all)
+      if(cirId!=='ti'){
+        var asdCir=getASDCircuito(row.assoc||'');
+        if(asdCir!=='nd'&&asdCir!=='tutti'&&asdCir!==cirId) continue;
+      }
       var key=cat.type==='cop'
         ?norm(row.p1||'')+'/'+norm(row.p2||'')
         :norm(row.cognome||'')+' '+norm(row.nome||'');
@@ -241,6 +248,7 @@ function goTab(tab){
   else if(tab==='upload')renderUpload();
   else if(tab==='classifiche')renderClass();
   else if(tab==='finalissima')renderFin();
+  else if(tab==='asd')renderASD();
   else if(tab==='settings')renderSettings();
 }
 
@@ -537,6 +545,93 @@ function buildASDSum(){
   return '<div class="card" style="margin-top:20px;border-left:3px solid var(--red)"><div class="ct">&#x1F534; '+asd+' &ndash; Stato Qualificazione</div><div class="tw"><table><thead><tr><th>Atleta</th><th>Circuito</th><th>Categoria</th><th>POS</th><th>Totale</th><th>Finalissima</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
 }
 
+
+// ── ASD CIRCUITI ─────────────────────────────────────────────
+var ASD_MAP = {}; // asd_name -> circuito
+
+async function loadASDMap(){
+  try{
+    var resp=await fetch(SUPA_URL+'/rest/v1/asd_circuiti?select=*',{headers:supaHeaders()});
+    var data=await resp.json();
+    ASD_MAP={};
+    if(Array.isArray(data)) data.forEach(function(r){ ASD_MAP[r.asd_name]=r.circuito; });
+  }catch(e){console.error('loadASDMap error',e);}
+}
+
+async function saveASDCircuito(asdName, circuito){
+  ASD_MAP[asdName]=circuito;
+  try{
+    await fetch(SUPA_URL+'/rest/v1/asd_circuiti',{
+      method:'POST',
+      headers:Object.assign({},supaHeaders(),{'Prefer':'resolution=merge-duplicates'}),
+      body:JSON.stringify({asd_name:asdName,circuito:circuito})
+    });
+  }catch(e){console.error('saveASDCircuito error',e);}
+}
+
+function getAllASD(){
+  var asdSet={};
+  Object.values(DB.results).forEach(function(res){
+    res.rows.forEach(function(row){
+      var a=row.assoc||'';
+      if(a) asdSet[a]=true;
+    });
+  });
+  return Object.keys(asdSet).sort();
+}
+
+function getASDCircuito(asdName){
+  return ASD_MAP[asdName]||'nd';
+}
+
+function renderASD(){
+  var el=document.getElementById('v-asd');
+  var allASD=getAllASD();
+  var nd=allASD.filter(function(a){return getASDCircuito(a)==='nd';});
+  var assigned=allASD.filter(function(a){return getASDCircuito(a)!=='nd';});
+  
+  var cirOpts=function(a){
+    var v=getASDCircuito(a);
+    return ['nd','nord','cs','sic','tutti'].map(function(c){
+      var labels={nd:'— Non assegnata —',nord:'Circuito Nord',cs:'Centro-Sud',sic:'Sicilia',tutti:'Tutti i circuiti'};
+      return '<option value="'+c+'"'+(v===c?' selected':'')+'>'+labels[c]+'</option>';
+    }).join('');
+  };
+
+  var rows=function(list){
+    return list.map(function(a){
+      return '<tr><td style="padding:8px 12px;font-size:13px">'+a+'</td>'+
+        '<td style="padding:8px 12px"><select class="asd-sel" data-asd="'+a.replace(/"/g,'&quot;')+'" style="padding:6px 10px;border-radius:6px;border:1px solid var(--brd);background:var(--s2);color:var(--tx);font-size:12px" onchange="onASDChange(this)">'+cirOpts(a)+'</select></td>'+
+        '<td style="padding:8px 12px"><button class="btn bg bsm" onclick="searchASD(''+a.replace(/'/g,"\'")+'')" title="Cerca su web">🔍</button></td></tr>';
+    }).join('');
+  };
+
+  el.innerHTML='<h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:8px">GESTIONE <span style="color:var(--grn)">ASD</span></h2>'+
+    '<p style="color:var(--tx2);font-size:13px;margin-bottom:20px">Assegna ogni ASD al circuito di appartenenza. Le classifiche filtreranno automaticamente.</p>'+
+    (nd.length?'<div class="card" style="margin-bottom:16px;border-left:3px solid var(--yel)">'+
+      '<div class="ct" style="color:var(--yel)">⚠️ Non assegnate ('+nd.length+')</div>'+
+      '<div class="tw"><table width="100%"><tbody>'+rows(nd)+'</tbody></table></div></div>':'<div class="al ao" style="margin-bottom:16px">✅ Tutte le ASD sono state assegnate!</div>')+
+    (assigned.length?'<div class="card"><div class="ct">✅ Assegnate ('+assigned.length+')</div>'+
+      '<div class="tw"><table width="100%"><tbody>'+rows(assigned)+'</tbody></table></div></div>':'');
+}
+
+function onASDChange(sel){
+  var asd=sel.dataset.asd;
+  var circ=sel.value;
+  saveASDCircuito(asd,circ).then(function(){
+    // Refresh without full re-render to preserve scroll
+    var allASD=getAllASD();
+    var nd=allASD.filter(function(a){return getASDCircuito(a)==='nd';});
+    var el=document.querySelector('#v-asd .ct');
+    if(el&&el.textContent.includes('Non assegnate')) el.textContent='⚠️ Non assegnate ('+nd.length+')';
+  });
+}
+
+function searchASD(asd){
+  var q=encodeURIComponent(asd+' Nordic Walking circuito');
+  window.open('https://www.google.com/search?q='+q,'_blank');
+}
+
 function renderSettings(){
   var el=document.getElementById('v-settings');
   el.innerHTML='<div style="max-width:600px"><h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:20px">&#x2699;&#xFE0F; <span style="color:var(--sic)">IMPOSTAZIONI</span></h2><div class="card" style="margin-bottom:16px;border-color:rgba(52,211,153,.3)"><div class="ct">&#x1F916; Motore OCR</div><p style="color:var(--tx2);font-size:13px">OCR tramite <strong>Gemini AI</strong> via Supabase Edge Function &mdash; nessuna API key da configurare nell\'app.</p></div><div class="card" style="margin-bottom:16px"><div class="ct">&#x1F3C3; ASD da evidenziare</div><div class="fg"><label>Nome ASD (ricerca parziale)</label><input type="text" id="set-asd" value="'+(DB.settings.asdHighlight||'')+'" placeholder="es. Sile Walking"></div></div><button class="btn bp" onclick="saveSettings()">&#x1F4BE; Salva impostazioni</button><div class="div"></div><div class="card" style="border-color:rgba(230,51,41,.3)"><div class="ct" style="color:var(--red2)">&#x26A0;&#xFE0F; Gestione dati</div><p style="color:var(--tx2);font-size:13px;margin-bottom:16px">Database: <strong>'+Object.keys(DB.results).length+' classifiche</strong> salvate.</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn bs2" onclick="expFullDB()">&#x1F4CA; Export completo DB</button><button class="btn bg" style="color:var(--red);border-color:var(--red)" onclick="confirmReset()">&#x1F5D1;&#xFE0F; Cancella tutti i dati</button></div></div></div>';
@@ -603,7 +698,7 @@ function fmtDT(iso){try{return new Date(iso).toLocaleString('it-IT',{day:'2-digi
 function fmtDs(iso){try{return new Date(iso).toLocaleDateString('it-IT',{day:'2-digit',month:'short'});}catch(e){return iso;}}
 
 loadSettings();
-loadAllResults().then(function(){renderDash();});
+Promise.all([loadAllResults(), loadASDMap()]).then(function(){renderDash();});
 </script>
 </body>
 </html>
