@@ -96,7 +96,7 @@ tbody tr.hl:hover{background:rgba(230,51,41,.12)!important}
       <button class="nb" onclick="goTab('classifiche')" id="t-classifiche"><span class="dot" style="background:#22d3ee"></span>Classifiche</button>
       <button class="nb" onclick="goTab('finalissima')" id="t-finalissima"><span class="dot" style="background:#fbbf24"></span>Finalissima</button>
       <button class="nb" onclick="goTab('asd')" id="t-asd"><span class="dot" style="background:#34d399"></span>ASD</button>
-      <button class="nb" onclick="goTab('asd-class')" id="t-asd-class"><span class="dot" style="background:#f97316"></span>Class. ASD</button>
+
       <button class="nb" onclick="goTab('settings')" id="t-settings"><span class="dot" style="background:#a78bfa"></span>Impostazioni</button>
     </nav>
   </header>
@@ -106,7 +106,7 @@ tbody tr.hl:hover{background:rgba(230,51,41,.12)!important}
     <div id="v-classifiche" style="display:none"></div>
     <div id="v-finalissima" style="display:none"></div>
     <div id="v-asd" style="display:none"></div>
-    <div id="v-asd-class" style="display:none"></div>
+
     <div id="v-settings" style="display:none"></div>
   </main>
 </div>
@@ -236,7 +236,7 @@ function pfloat(s){return typeof s==='number'?s:parseFloat(String(s).replace(','
 function isASD(a){if(!DB.settings.asdHighlight||!a)return false;return a.toLowerCase().indexOf(DB.settings.asdHighlight.toLowerCase())>=0;}
 
 var activeTab='dashboard';
-var clState={circuit:'nord',cat:'istruttore-m'};
+var clState={circuit:'nord',cat:'istruttore-m',showASD:false};
 var fnState={circuit:'nord',cat:'istruttore-m'};
 var upState={stage:'',cat:''};
 
@@ -251,7 +251,6 @@ function goTab(tab){
   else if(tab==='classifiche')renderClass();
   else if(tab==='finalissima')renderFin();
   else if(tab==='asd')renderASD();
-  else if(tab==='asd-class')renderASDClass();
   else if(tab==='settings')renderSettings();
 }
 
@@ -474,12 +473,56 @@ async function confirmSave(){
 
 function closeModal(){document.getElementById('mo').classList.remove('open');}
 
+
+function buildASDClassContent(cirId){
+  var rows=getASDCircuitStandings(cirId);
+  var natRows=getASDNationalStandings();
+  
+  var circHtml='';
+  if(!rows.length){
+    circHtml='<div class="se">Nessun dato per '+CIR[cirId].name+'</div>';
+  } else {
+    var body=rows.map(function(r,i){
+      return '<tr class="'+(isASD(r.asd)?'hl':'')+'">'+
+        '<td><span class="pb p'+(i<3?i+1:'x')+'">'+(i+1)+'</span></td>'+
+        '<td style="font-weight:'+(isASD(r.asd)?600:400)+';color:'+(isASD(r.asd)?'var(--red)':'var(--tx)')+'">'+r.asd+'</td>'+
+        '<td class="pts" style="color:var(--red)">'+r.total+'</td>'+
+        '</tr>';
+    }).join('');
+    circHtml='<div class="tw"><table><thead><tr><th>POS</th><th>ASD</th><th>PUNTI CIRCUITO</th></tr></thead><tbody>'+body+'</tbody></table></div>'+
+      '<p style="font-size:11px;color:var(--tx3);margin-top:8px">1°=100, 2°=95... 10°=55, dall\' 11°=54 poi -1. Jolly x2. Solo categorie individuali.</p>';
+  }
+  
+  var natHtml='';
+  if(natRows.length){
+    var natBody=natRows.map(function(r,i){
+      return '<tr class="'+(isASD(r.asd)?'hl':'')+'">'+
+        '<td><span class="pb p'+(i<3?i+1:'x')+'">'+(i+1)+'</span></td>'+
+        '<td style="font-weight:'+(isASD(r.asd)?600:400)+';color:'+(isASD(r.asd)?'var(--red)':'var(--tx)')+'">'+r.asd+'</td>'+
+        '<td class="pts" style="color:var(--cs)">'+r.total+'</td>'+
+        '</tr>';
+    }).join('');
+    natHtml='<div style="margin-top:20px"><div style="font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:10px">&#x1F30D; Classifica Nazionale a Squadre</div>'+
+      '<div class="tw"><table><thead><tr><th>POS</th><th>ASD</th><th>PUNTI NAZIONALI</th></tr></thead><tbody>'+natBody+'</tbody></table></div>'+
+      '<p style="font-size:11px;color:var(--tx3);margin-top:8px">Miglior camminatore + miglior istruttore = punteggio pieno (migliori 3 tappe). Altri: 10 pt (top10) o 5 pt (dall\' 11°).</p></div>';
+  }
+  
+  return '<div style="font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:10px">&#x1F3C6; Classifica ASD &ndash; '+CIR[cirId].name+'</div>'+circHtml+natHtml;
+}
+
 function renderClass(){
   var el=document.getElementById('v-classifiche');
   var cir=clState.circuit,cat=clState.cat;
   var cirBtns=['ti','nord','cs','sic'].map(function(c){return '<button class="tb'+(cir===c?' active':'')+'" style="'+(cir===c?'border-color:'+CIR[c].color+';color:'+CIR[c].color:'')+'" onclick="clState.circuit=\''+c+'\';renderClass()">'+CIR[c].name+'</button>';}).join('');
-  var catBtns=CATS.map(function(c){return '<button class="tb'+(cat===c.id?' active':'')+'" style="'+(cat===c.id?'border-color:'+CIR[cir].color+';color:'+CIR[cir].color:'')+'" onclick="clState.cat=\''+c.id+'\';renderClass()">'+c.name+'</button>';}).join('');
-  el.innerHTML='<h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:16px">CLASSIFICHE <span style="color:var(--red)">CIRCUITO</span></h2><div class="tg">'+cirBtns+'</div><div class="tg">'+catBtns+'</div><div class="eb"><button class="btn bg bsm" onclick="expCSV()">&#x1F4E5; CSV</button><button class="btn bg bsm" onclick="expXLS()">&#x1F4CA; Excel</button><button class="btn bg bsm" onclick="expImg()">&#x1F5BC;&#xFE0F; Immagine</button><button class="btn bg bsm" onclick="expPDF()">&#x1F4C4; PDF</button><span style="margin-left:auto;font-size:12px;color:var(--tx3)"><span style="background:var(--red);width:10px;height:10px;display:inline-block;border-radius:2px;vertical-align:middle;margin-right:4px"></span>'+(DB.settings.asdHighlight||'')+'</span></div><div class="card" id="exp-wrap">'+buildStTable(cir,cat)+'</div><div style="margin-top:20px">'+buildStageDetail(cir,cat)+'</div>';
+  var catBtns=CATS.map(function(c){return '<button class="tb'+(cat===c.id?' active':'')+'" style="'+(cat===c.id?'border-color:'+CIR[cir].color+';color:'+CIR[cir].color:'')+'" onclick="clState.cat=\''+c.id+'\';clState.showASD=false;renderClass()">'+c.name+'</button>';}).join('');
+  catBtns+='<button class="tb'+(clState.showASD?' active':'')+'" style="'+(clState.showASD?'border-color:var(--red);color:var(--red)':'')+'" onclick="clState.showASD=true;renderClass()">&#x1F3C6; Classifica ASD</button>';
+  var mainContent='';
+  if(clState.showASD){
+    mainContent='<div class="card" id="exp-wrap">'+buildASDClassContent(cir)+'</div>';
+  } else {
+    mainContent='<div class="eb"><button class="btn bg bsm" onclick="expCSV()">&#x1F4E5; CSV</button><button class="btn bg bsm" onclick="expXLS()">&#x1F4CA; Excel</button><button class="btn bg bsm" onclick="expImg()">&#x1F5BC;&#xFE0F; Immagine</button><button class="btn bg bsm" onclick="expPDF()">&#x1F4C4; PDF</button><span style="margin-left:auto;font-size:12px;color:var(--tx3)"><span style="background:var(--red);width:10px;height:10px;display:inline-block;border-radius:2px;vertical-align:middle;margin-right:4px"></span>'+(DB.settings.asdHighlight||'')+'</span></div><div class="card" id="exp-wrap">'+buildStTable(cir,cat)+'</div><div style="margin-top:20px">'+buildStageDetail(cir,cat)+'</div>';
+  }
+  el.innerHTML='<h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:16px">CLASSIFICHE <span style="color:var(--red)">CIRCUITO</span></h2><div class="tg">'+cirBtns+'</div><div class="tg">'+catBtns+'</div>'+mainContent;
 }
 
 function buildStTable(cirId,catId){
