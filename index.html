@@ -730,11 +730,16 @@ function renderASDClass(){
   var cir=asdClassState.circuit;
 
   var viewBtns=['circuit','national'].map(function(vv){
-    return '<button class="tb'+(v===vv?' active':'')+'" style="'+(v===vv?'border-color:var(--red);color:var(--red)':'')+'" onclick="asdClassState.view=''+vv+'';renderASDClass()">'+(vv==='circuit'?'Per Circuito':'Nazionale')+'</button>';
+    var active=v===vv?' active':'';
+    var style=v===vv?'border-color:var(--red);color:var(--red)':'';
+    var label=vv==='circuit'?'Per Circuito':'Nazionale';
+    return '<button class="tb'+active+'" style="'+style+'" onclick="asdClassState.view=\''+vv+'\';renderASDClass()">'+label+'</button>';
   }).join('');
 
   var cirBtns=['ti','nord','cs','sic'].map(function(c){
-    return '<button class="tb'+(cir===c?' active':'')+'" style="'+(cir===c?'border-color:'+CIR[c].color+';color:'+CIR[c].color:'')+'" onclick="asdClassState.circuit=''+c+'';renderASDClass()">'+CIR[c].name+'</button>';
+    var active=cir===c?' active':'';
+    var style=cir===c?'border-color:'+CIR[c].color+';color:'+CIR[c].color:'';
+    return '<button class="tb'+active+'" style="'+style+'" onclick="asdClassState.circuit=\''+c+'\';renderASDClass()">'+CIR[c].name+'</button>';
   }).join('');
 
   var tableHtml='';
@@ -751,7 +756,7 @@ function renderASDClass(){
           '</tr>';
       }).join('');
       tableHtml='<div class="tw"><table><thead><tr><th>POS</th><th>ASD</th><th>PUNTI</th></tr></thead><tbody>'+bodyRows+'</tbody></table></div>'+
-        '<p style="font-size:11px;color:var(--tx3);margin-top:10px">Punteggi: 1°=100, 2°=95... 10°=55, dall'11°=54 poi -1. Tappa Jolly ×2. Solo categorie individuali.</p>';
+        '<p style="font-size:11px;color:var(--tx3);margin-top:10px">Punteggi: 1°=100, 2°=95... 10°=55, dall\'11°=54 poi -1. Tappa Jolly ×2. Solo categorie individuali.</p>';
     }
   } else {
     var natRows=getASDNationalStandings();
@@ -766,7 +771,7 @@ function renderASDClass(){
           '</tr>';
       }).join('');
       tableHtml='<div class="tw"><table><thead><tr><th>POS</th><th>ASD</th><th>PUNTI</th></tr></thead><tbody>'+natBody+'</tbody></table></div>'+
-        '<p style="font-size:11px;color:var(--tx3);margin-top:10px">Miglior camminatore + miglior istruttore = punteggio pieno (migliori 3 tappe). Altri atleti: 10 punti (top 10) o 5 punti (dall'11°).</p>';
+        '<p style="font-size:11px;color:var(--tx3);margin-top:10px">Miglior camminatore + miglior istruttore = punteggio pieno (migliori 3 tappe). Altri atleti: 10 punti (top 10) o 5 punti (dall\'11°).</p>';
     }
   }
 
