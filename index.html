@@ -96,6 +96,7 @@ tbody tr.hl:hover{background:rgba(230,51,41,.12)!important}
       <button class="nb" onclick="goTab('classifiche')" id="t-classifiche"><span class="dot" style="background:#22d3ee"></span>Classifiche</button>
       <button class="nb" onclick="goTab('finalissima')" id="t-finalissima"><span class="dot" style="background:#fbbf24"></span>Finalissima</button>
       <button class="nb" onclick="goTab('asd')" id="t-asd"><span class="dot" style="background:#34d399"></span>ASD</button>
+      <button class="nb" onclick="goTab('asd-class')" id="t-asd-class"><span class="dot" style="background:#f97316"></span>Class. ASD</button>
       <button class="nb" onclick="goTab('settings')" id="t-settings"><span class="dot" style="background:#a78bfa"></span>Impostazioni</button>
     </nav>
   </header>
@@ -105,6 +106,7 @@ tbody tr.hl:hover{background:rgba(230,51,41,.12)!important}
     <div id="v-classifiche" style="display:none"></div>
     <div id="v-finalissima" style="display:none"></div>
     <div id="v-asd" style="display:none"></div>
+    <div id="v-asd-class" style="display:none"></div>
     <div id="v-settings" style="display:none"></div>
   </main>
 </div>
@@ -249,6 +251,7 @@ function goTab(tab){
   else if(tab==='classifiche')renderClass();
   else if(tab==='finalissima')renderFin();
   else if(tab==='asd')renderASD();
+  else if(tab==='asd-class')renderASDClass();
   else if(tab==='settings')renderSettings();
 }
 
@@ -545,6 +548,233 @@ function buildASDSum(){
   return '<div class="card" style="margin-top:20px;border-left:3px solid var(--red)"><div class="ct">&#x1F534; '+asd+' &ndash; Stato Qualificazione</div><div class="tw"><table><thead><tr><th>Atleta</th><th>Circuito</th><th>Categoria</th><th>POS</th><th>Totale</th><th>Finalissima</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
 }
 
+
+
+// ── PUNTEGGI POSIZIONE ────────────────────────────────────────
+var POS_POINTS=[100,95,90,85,80,75,70,65,60,55];
+function posToPoints(pos){
+  if(pos<=0)return 0;
+  if(pos<=10)return POS_POINTS[pos-1];
+  return Math.max(1, 54-(pos-11));
+}
+
+// Tappa Italia: 100 al 1°, poi -1 a scorrere
+function posToPointsTI(pos){
+  if(pos<=0)return 0;
+  return Math.max(1, 101-pos);
+}
+
+function isTappaItalia(stageId){ return stageId==='bologna-ti'; }
+
+// ── CLASSIFICA ASD PER CIRCUITO ──────────────────────────────
+function getASDCircuitStandings(cirId){
+  // Only individual cats (no coppie)
+  var indCats=CATS.filter(function(c){return c.type==='ind';});
+  var stgs=STAGES.filter(function(s){return s.circuits.indexOf(cirId)>=0&&s.id!=='san-dona';});
+  var asdMap={};
+
+  for(var si=0;si<stgs.length;si++){
+    var st=stgs[si];
+    var jolly=st.jollyFor.indexOf(cirId)>=0;
+    for(var ci=0;ci<indCats.length;ci++){
+      var cat=indCats[ci];
+      var res=getRes(st.id,cat.id);
+      if(!res)continue;
+      for(var ri=0;ri<res.rows.length;ri++){
+        var row=res.rows[ri];
+        var asd=row.assoc||'';
+        if(!asd)continue;
+        // Filter by circuit
+        if(cirId!=='ti'){
+          var ac=getASDCircuito(asd);
+          if(ac!=='nd'&&ac!=='tutti'&&ac!==cirId)continue;
+        }
+        if(!asdMap[asd])asdMap[asd]={asd:asd,total:0,details:[]};
+        var pts=isTappaItalia(st.id)?posToPointsTI(row.pos):posToPoints(row.pos);
+        if(jolly)pts*=2;
+        asdMap[asd].total+=pts;
+        asdMap[asd].details.push({stage:st.name,cat:cat.name,pos:row.pos,pts:pts,jolly:jolly});
+      }
+    }
+  }
+  return Object.values(asdMap).sort(function(a,b){return b.total-a.total;}).map(function(a,i){a.pos=i+1;return a;});
+}
+
+// ── CLASSIFICA ASD NAZIONALE ─────────────────────────────────
+function getASDNationalStandings(){
+  var indCats=CATS.filter(function(c){return c.type==='ind';});
+  // Group by cat type: camminatori and istruttori
+  var campCats=indCats.filter(function(c){return c.id.indexOf('camminatore')>=0;});
+  var istrCats=indCats.filter(function(c){return c.id.indexOf('istruttore')>=0;});
+  var allStgs=STAGES.filter(function(s){return s.id!=='san-dona';});
+  var asdMap={};
+
+  // For each ASD, for each athlete, find their best 3 stage scores
+  // First collect all athlete scores per stage
+  function collectAthleteScores(cats){
+    // Returns {asd: {athleteKey: [{stageId, pts}]}}
+    var data={};
+    for(var si=0;si<allStgs.length;si++){
+      var st=allStgs[si];
+      for(var ci=0;ci<cats.length;ci++){
+        var cat=cats[ci];
+        var res=getRes(st.id,cat.id);
+        if(!res)continue;
+        for(var ri=0;ri<res.rows.length;ri++){
+          var row=res.rows[ri];
+          var asd=row.assoc||'';
+          if(!asd)continue;
+          var key=norm(row.cognome||'')+' '+norm(row.nome||'');
+          if(!data[asd])data[asd]={};
+          if(!data[asd][key])data[asd][key]=[];
+          var pts=isTappaItalia(st.id)?posToPointsTI(row.pos):posToPoints(row.pos);
+          if(st.jollyFor&&st.jollyFor.length>0){
+            // jolly for any circuit
+            pts*=2;
+          }
+          data[asd][key].push({stageId:st.id,pos:row.pos,pts:pts});
+        }
+      }
+    }
+    return data;
+  }
+
+  function best3Total(scores){
+    var sorted=scores.slice().sort(function(a,b){return b.pts-a.pts;});
+    return sorted.slice(0,3).reduce(function(s,x){return s+x.pts;},0);
+  }
+
+  function processASDCat(asd, athletes, isBest){
+    // isBest: true = full points (best athlete), false = 10/5 points
+    var total=0;
+    var keys=Object.keys(athletes);
+    if(!keys.length)return 0;
+    if(isBest){
+      // Find athlete with highest best3
+      var best=0;
+      keys.forEach(function(k){
+        var b=best3Total(athletes[k]);
+        if(b>best)best=b;
+      });
+      total=best;
+    } else {
+      // Others: check their best stage position
+      keys.forEach(function(k){
+        var scores=athletes[k];
+        if(!scores.length)return;
+        var bestPos=Math.min.apply(null,scores.map(function(s){return s.pos;}));
+        total+=(bestPos<=10?10:5);
+      });
+    }
+    return total;
+  }
+
+  var campData=collectAthleteScores(campCats);
+  var istrData=collectAthleteScores(istrCats);
+
+  var allASD=Array.from(new Set(
+    Object.keys(campData).concat(Object.keys(istrData))
+  ));
+
+  allASD.forEach(function(asd){
+    var total=0;
+    // Best camminatore
+    if(campData[asd]){
+      var keys=Object.keys(campData[asd]);
+      if(keys.length){
+        var bestCamp=0;
+        var bestCampKey='';
+        keys.forEach(function(k){
+          var b=best3Total(campData[asd][k]);
+          if(b>bestCamp){bestCamp=b;bestCampKey=k;}
+        });
+        total+=bestCamp;
+        // Others
+        keys.filter(function(k){return k!==bestCampKey;}).forEach(function(k){
+          var scores=campData[asd][k];
+          var bestPos=scores.length?Math.min.apply(null,scores.map(function(s){return s.pos;})):999;
+          total+=(bestPos<=10?10:5);
+        });
+      }
+    }
+    // Best istruttore
+    if(istrData[asd]){
+      var keys2=Object.keys(istrData[asd]);
+      if(keys2.length){
+        var bestIstr=0;
+        var bestIstrKey='';
+        keys2.forEach(function(k){
+          var b=best3Total(istrData[asd][k]);
+          if(b>bestIstr){bestIstr=b;bestIstrKey=k;}
+        });
+        total+=bestIstr;
+        keys2.filter(function(k){return k!==bestIstrKey;}).forEach(function(k){
+          var scores=istrData[asd][k];
+          var bestPos=scores.length?Math.min.apply(null,scores.map(function(s){return s.pos;})):999;
+          total+=(bestPos<=10?10:5);
+        });
+      }
+    }
+    asdMap[asd]={asd:asd,total:total};
+  });
+
+  return Object.values(asdMap).sort(function(a,b){return b.total-a.total;}).map(function(a,i){a.pos=i+1;return a;});
+}
+
+// ── RENDER CLASSIFICA ASD ─────────────────────────────────────
+var asdClassState={view:'circuit',circuit:'nord'};
+
+function renderASDClass(){
+  var el=document.getElementById('v-asd-class');
+  var v=asdClassState.view;
+  var cir=asdClassState.circuit;
+
+  var viewBtns=['circuit','national'].map(function(vv){
+    return '<button class="tb'+(v===vv?' active':'')+'" style="'+(v===vv?'border-color:var(--red);color:var(--red)':'')+'" onclick="asdClassState.view=''+vv+'';renderASDClass()">'+(vv==='circuit'?'Per Circuito':'Nazionale')+'</button>';
+  }).join('');
+
+  var cirBtns=['ti','nord','cs','sic'].map(function(c){
+    return '<button class="tb'+(cir===c?' active':'')+'" style="'+(cir===c?'border-color:'+CIR[c].color+';color:'+CIR[c].color:'')+'" onclick="asdClassState.circuit=''+c+'';renderASDClass()">'+CIR[c].name+'</button>';
+  }).join('');
+
+  var tableHtml='';
+  if(v==='circuit'){
+    var rows=getASDCircuitStandings(cir);
+    if(!rows.length){
+      tableHtml='<div class="se">Nessun dato disponibile per '+CIR[cir].name+'</div>';
+    } else {
+      var bodyRows=rows.map(function(r,i){
+        return '<tr class="'+(isASD(r.asd)?'hl':'')+'">'+
+          '<td><span class="pb p'+(i<3?i+1:'x')+'">'+(i+1)+'</span></td>'+
+          '<td style="font-weight:'+(isASD(r.asd)?600:400)+';color:'+(isASD(r.asd)?'var(--red)':'var(--tx)')+'">'+r.asd+'</td>'+
+          '<td class="pts" style="color:var(--red)">'+r.total+'</td>'+
+          '</tr>';
+      }).join('');
+      tableHtml='<div class="tw"><table><thead><tr><th>POS</th><th>ASD</th><th>PUNTI</th></tr></thead><tbody>'+bodyRows+'</tbody></table></div>'+
+        '<p style="font-size:11px;color:var(--tx3);margin-top:10px">Punteggi: 1°=100, 2°=95... 10°=55, dall'11°=54 poi -1. Tappa Jolly ×2. Solo categorie individuali.</p>';
+    }
+  } else {
+    var natRows=getASDNationalStandings();
+    if(!natRows.length){
+      tableHtml='<div class="se">Nessun dato disponibile</div>';
+    } else {
+      var natBody=natRows.map(function(r,i){
+        return '<tr class="'+(isASD(r.asd)?'hl':'')+'">'+
+          '<td><span class="pb p'+(i<3?i+1:'x')+'">'+(i+1)+'</span></td>'+
+          '<td style="font-weight:'+(isASD(r.asd)?600:400)+';color:'+(isASD(r.asd)?'var(--red)':'var(--tx)')+'">'+r.asd+'</td>'+
+          '<td class="pts" style="color:var(--red)">'+r.total+'</td>'+
+          '</tr>';
+      }).join('');
+      tableHtml='<div class="tw"><table><thead><tr><th>POS</th><th>ASD</th><th>PUNTI</th></tr></thead><tbody>'+natBody+'</tbody></table></div>'+
+        '<p style="font-size:11px;color:var(--tx3);margin-top:10px">Miglior camminatore + miglior istruttore = punteggio pieno (migliori 3 tappe). Altri atleti: 10 punti (top 10) o 5 punti (dall'11°).</p>';
+    }
+  }
+
+  el.innerHTML='<h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:16px">CLASSIFICA <span style="color:var(--red)">ASD</span></h2>'+
+    '<div class="tg">'+viewBtns+'</div>'+
+    (v==='circuit'?'<div class="tg">'+cirBtns+'</div>':'')+
+    '<div class="card">'+tableHtml+'</div>';
+}
 
 // ── ASD CIRCUITI ─────────────────────────────────────────────
 var ASD_MAP = {}; // asd_name -> circuito
