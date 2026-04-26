@@ -602,7 +602,7 @@ function renderASD(){
     return list.map(function(a){
       return '<tr><td style="padding:8px 12px;font-size:13px">'+a+'</td>'+
         '<td style="padding:8px 12px"><select class="asd-sel" data-asd="'+a.replace(/"/g,'&quot;')+'" style="padding:6px 10px;border-radius:6px;border:1px solid var(--brd);background:var(--s2);color:var(--tx);font-size:12px" onchange="onASDChange(this)">'+cirOpts(a)+'</select></td>'+
-        '<td style="padding:8px 12px"><button class="btn bg bsm" onclick="searchASD(''+a.replace(/'/g,"\'")+'')" title="Cerca su web">🔍</button></td></tr>';
+        '<td style="padding:8px 12px"><button class="btn bg bsm" onclick="searchASD(this)" data-asd-search="'+a.replace(/"/g,'&quot;')+'" title="Cerca su web">🔍</button></td></tr>';
     }).join('');
   };
 
@@ -627,7 +627,8 @@ function onASDChange(sel){
   });
 }
 
-function searchASD(asd){
+function searchASD(btn){
+  var asd=btn.dataset.asdSearch||'';
   var q=encodeURIComponent(asd+' Nordic Walking circuito');
   window.open('https://www.google.com/search?q='+q,'_blank');
 }
