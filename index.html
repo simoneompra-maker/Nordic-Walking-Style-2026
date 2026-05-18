@@ -217,9 +217,9 @@ function getStandings(cirId,catId){
         if(asdCir!=='nd'&&asdCir!=='tutti'&&asdCir!==cirId) continue;
       }
       var key=cat.type==='cop'
-        ?norm(row.p1||'')+'/'+norm(row.p2||'')
+        ?pairKey(row.p1,row.p2)
         :norm(row.cognome||'')+' '+norm(row.nome||'');
-      if(!map[key])map[key]={key:key,display:cat.type==='cop'?(row.p1||'')+' / '+(row.p2||''):(row.cognome||'')+' '+(row.nome||''),assoc:row.assoc||'',stages:[],total:0};
+      if(!map[key])map[key]={key:key,display:cat.type==='cop'?pairDisplay(row.p1,row.p2):(row.cognome||'')+' '+(row.nome||''),assoc:row.assoc||'',stages:[],total:0};
       var pts=pfloat(row.pts);
       var used=jolly?pts*2:pts;
       map[key].stages.push({stageId:st.id,stageName:st.name,pts:pts,ptsUsed:used,isJolly:jolly});
@@ -231,7 +231,101 @@ function getStandings(cirId,catId){
   return arr.map(function(a,i){a.pos=i+1;return a;});
 }
 
-function norm(s){return s.trim().toLowerCase();}
+function norm(s){return (s||'').trim().toLowerCase();}
+function pairKey(a,b){
+  var na=norm(a||''), nb=norm(b||'');
+  return na<=nb ? na+'/'+nb : nb+'/'+na;
+}
+function pairDisplay(a,b){
+  var na=(a||'').trim(), nb=(b||'').trim();
+  return norm(a)<=norm(b) ? na+' / '+nb : nb+' / '+na;
+}
+function levenshtein(a,b){
+  a=(a||'').toLowerCase(); b=(b||'').toLowerCase();
+  if(a===b)return 0;
+  if(!a.length)return b.length;
+  if(!b.length)return a.length;
+  var m=[];
+  for(var i=0;i<=b.length;i++)m[i]=[i];
+  for(var j=0;j<=a.length;j++)m[0][j]=j;
+  for(var i=1;i<=b.length;i++){
+    for(var j=1;j<=a.length;j++){
+      if(b.charAt(i-1)===a.charAt(j-1))m[i][j]=m[i-1][j-1];
+      else m[i][j]=Math.min(m[i-1][j-1]+1,m[i][j-1]+1,m[i-1][j]+1);
+    }
+  }
+  return m[b.length][a.length];
+}
+function similarity(a,b){
+  if(!a||!b)return 0;
+  var maxLen=Math.max(a.length,b.length);
+  if(maxLen===0)return 1;
+  return 1-(levenshtein(a,b)/maxLen);
+}
+function getAllNamesForCat(catId){
+  var cat=CATS.find(function(c){return c.id===catId;});
+  if(!cat)return [];
+  var names={};
+  Object.values(DB.results).forEach(function(res){
+    if(res.catId!==catId)return;
+    res.rows.forEach(function(row){
+      if(cat.type==='cop'){
+        var k=pairDisplay(row.p1,row.p2);
+        if(k)names[k]=true;
+      } else {
+        var k=((row.cognome||'')+' '+(row.nome||'')).trim();
+        if(k)names[k]=true;
+      }
+    });
+  });
+  return Object.keys(names);
+}
+function findSimilarName(name, catId){
+  var existing=getAllNamesForCat(catId);
+  var ignored=getIgnoredAnomalies();
+  for(var i=0;i<existing.length;i++){
+    var ex=existing[i];
+    if(ex.toLowerCase()===name.toLowerCase())continue;
+    var sim=similarity(ex.toLowerCase(),name.toLowerCase());
+    if(sim>=0.85){
+      var pair=[name,ex].sort().join('||');
+      if(ignored.indexOf(pair)>=0)continue;
+      return {similar:ex, score:sim};
+    }
+  }
+  return null;
+}
+function getIgnoredAnomalies(){
+  try{return JSON.parse(localStorage.getItem('nws2026_anomalies_ignored')||'[]');}catch(e){return [];}
+}
+function saveIgnoredAnomalies(list){
+  try{localStorage.setItem('nws2026_anomalies_ignored',JSON.stringify(list));}catch(e){}
+}
+function ignoreAnomaly(name1,name2){
+  var list=getIgnoredAnomalies();
+  var pair=[name1,name2].sort().join('||');
+  if(list.indexOf(pair)<0){list.push(pair);saveIgnoredAnomalies(list);}
+}
+function detectAllAnomalies(){
+  var ignored=getIgnoredAnomalies();
+  var results=[];
+  CATS.forEach(function(cat){
+    var names=getAllNamesForCat(cat.id);
+    for(var i=0;i<names.length;i++){
+      for(var j=i+1;j<names.length;j++){
+        var a=names[i].toLowerCase(), b=names[j].toLowerCase();
+        if(a===b)continue;
+        var sim=similarity(a,b);
+        if(sim>=0.85){
+          var pair=[names[i],names[j]].sort().join('||');
+          if(ignored.indexOf(pair)>=0)continue;
+          results.push({cat:cat.name,catId:cat.id,name1:names[i],name2:names[j],score:sim});
+        }
+      }
+    }
+  });
+  return results.sort(function(a,b){return b.score-a.score;});
+}
 function pfloat(s){return typeof s==='number'?s:parseFloat(String(s).replace(',','.'))||0;}
 function isASD(a){if(!DB.settings.asdHighlight||!a)return false;return a.toLowerCase().indexOf(DB.settings.asdHighlight.toLowerCase())>=0;}
 
@@ -449,9 +543,30 @@ function showModal(rows,stageId,catId){
 function buildRevTable(rows,isCop){
   var cols=isCop?['pos','p1','p2','assoc','tot','pts']:['pos','cognome','nome','assoc','tot','pts'];
   var hdrs=isCop?['POS','Partecipante 1','Partecipante 2','Associazione','Tot. Giudici','Punti']:['POS','Cognome','Nome','Associazione','Tot. Giudici','Punti'];
-  var html='<p style="color:var(--tx2);font-size:12px;margin-bottom:12px">Clicca su qualsiasi cella per modificarla prima di salvare.</p><div class="tw"><table><thead><tr>'+hdrs.map(function(h){return '<th>'+h+'</th>';}).join('')+'<th></th></tr></thead><tbody>';
+  // Detect anomalies for each row
+  var anomalies=rows.map(function(r){
+    var name=isCop?pairDisplay(r.p1,r.p2):((r.cognome||'')+' '+(r.nome||'')).trim();
+    if(!name)return null;
+    return findSimilarName(name, _cat);
+  });
+  var anomCount=anomalies.filter(function(a){return a;}).length;
+  var html='<p style="color:var(--tx2);font-size:12px;margin-bottom:12px">Clicca su qualsiasi cella per modificarla prima di salvare.</p>';
+  if(anomCount>0){
+    html+='<div class="al" style="background:#fff7e6;border:1px solid #fbbf24;color:#92400e;margin-bottom:12px">&#x26A0;&#xFE0F; <strong>'+anomCount+' nome'+(anomCount>1?'i':'')+' simile'+(anomCount>1?'i':'')+'</strong> a voci gi&#xE0; presenti. Verifica per evitare duplicati.</div>';
+  }
+  html+='<div class="tw"><table><thead><tr>'+hdrs.map(function(h){return '<th>'+h+'</th>';}).join('')+'<th></th></tr></thead><tbody>';
   rows.forEach(function(r,i){
-    html+='<tr>'+cols.map(function(c,j){return '<td><input class="ec" style="'+(j===0||j===4?'width:50px':j===5?'width:110px':'')+'" data-row="'+i+'" data-col="'+c+'" value="'+(r[c]||'')+'" onchange="_rows['+i+'][\''+c+'\']=this.value"></td>';}).join('')+'<td><span class="rd" onclick="delRow('+i+')">&#x1F5D1;</span></td></tr>';
+    var anom=anomalies[i];
+    var rowStyle=anom?' style="background:#fff7e6"':'';
+    html+='<tr'+rowStyle+'>'+cols.map(function(c,j){
+      var warn='';
+      if(anom&&((isCop&&(c==='p1'||c==='p2'))||(!isCop&&(c==='cognome'||c==='nome')))){
+        if((isCop&&c==='p1')||(!isCop&&c==='cognome')){
+          warn=' <span title="Simile a: '+anom.similar+' ('+Math.round(anom.score*100)+'%)" style="color:#f59e0b;cursor:help">&#x26A0;&#xFE0F;</span>';
+        }
+      }
+      return '<td><input class="ec" style="'+(j===0||j===4?'width:50px':j===5?'width:110px':'')+'" data-row="'+i+'" data-col="'+c+'" value="'+(r[c]||'')+'" onchange="_rows['+i+'][\''+c+'\']=this.value">'+warn+'</td>';
+    }).join('')+'<td><span class="rd" onclick="delRow('+i+')">&#x1F5D1;</span></td></tr>';
   });
   html+='</tbody></table></div><button class="btn bg bsm" style="margin-top:12px" onclick="addRow()">+ Aggiungi riga</button>';
   return html;
@@ -913,7 +1028,19 @@ function searchASD(btn){
 
 function renderSettings(){
   var el=document.getElementById('v-settings');
-  el.innerHTML='<div style="max-width:600px"><h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:20px">&#x2699;&#xFE0F; <span style="color:var(--sic)">IMPOSTAZIONI</span></h2><div class="card" style="margin-bottom:16px;border-color:rgba(52,211,153,.3)"><div class="ct">&#x1F916; Motore OCR</div><p style="color:var(--tx2);font-size:13px">OCR tramite <strong>Gemini AI</strong> via Supabase Edge Function &mdash; nessuna API key da configurare nell\'app.</p></div><div class="card" style="margin-bottom:16px"><div class="ct">&#x1F3C3; ASD da evidenziare</div><div class="fg"><label>Nome ASD (ricerca parziale)</label><input type="text" id="set-asd" value="'+(DB.settings.asdHighlight||'')+'" placeholder="es. Sile Walking"></div></div><button class="btn bp" onclick="saveSettings()">&#x1F4BE; Salva impostazioni</button><div class="div"></div><div class="card" style="border-color:rgba(230,51,41,.3)"><div class="ct" style="color:var(--red2)">&#x26A0;&#xFE0F; Gestione dati</div><p style="color:var(--tx2);font-size:13px;margin-bottom:16px">Database: <strong>'+Object.keys(DB.results).length+' classifiche</strong> salvate.</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn bs2" onclick="expFullDB()">&#x1F4CA; Export completo DB</button><button class="btn bg" style="color:var(--red);border-color:var(--red)" onclick="confirmReset()">&#x1F5D1;&#xFE0F; Cancella tutti i dati</button></div></div></div>';
+  // Build anomalies section
+  var anomalies=detectAllAnomalies();
+  var anomHtml='';
+  if(anomalies.length){
+    anomHtml='<div class="card" style="margin-bottom:16px;border-color:#fbbf24"><div class="ct" style="color:#92400e">&#x26A0;&#xFE0F; Anomalie rilevate ('+anomalies.length+')</div><p style="color:var(--tx2);font-size:12px;margin-bottom:12px">Nomi simili che potrebbero essere duplicati. Correggi manualmente caricando di nuovo la classifica o ignora i falsi positivi.</p>';
+    anomalies.forEach(function(a){
+      anomHtml+='<div style="padding:10px;background:#fff7e6;border-radius:6px;margin-bottom:8px;font-size:13px"><div style="font-weight:600;color:#92400e">'+a.cat+' &mdash; '+Math.round(a.score*100)+'% simile</div><div style="margin:6px 0"><span style="color:var(--tx)">'+a.name1+'</span> &harr; <span style="color:var(--tx)">'+a.name2+'</span></div><button class="btn bg bsm" onclick="ignoreAnomalyAndRefresh(\''+a.name1.replace(/\'/g,"\\'").replace(/"/g,'&quot;')+'\',\''+a.name2.replace(/\'/g,"\\'").replace(/"/g,'&quot;')+'\')">Ignora</button></div>';
+    });
+    anomHtml+='</div>';
+  } else {
+    anomHtml='<div class="al ao" style="margin-bottom:16px">&#x2705; Nessuna anomalia rilevata</div>';
+  }
+  el.innerHTML='<div style="max-width:600px"><h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:20px">&#x2699;&#xFE0F; <span style="color:var(--sic)">IMPOSTAZIONI</span></h2><div class="card" style="margin-bottom:16px;border-color:rgba(52,211,153,.3)"><div class="ct">&#x1F916; Motore OCR</div><p style="color:var(--tx2);font-size:13px">OCR tramite <strong>Gemini AI</strong> via Supabase Edge Function &mdash; nessuna API key da configurare nell\'app.</p></div><div class="card" style="margin-bottom:16px"><div class="ct">&#x1F3C3; ASD da evidenziare</div><div class="fg"><label>Nome ASD (ricerca parziale)</label><input type="text" id="set-asd" value="'+(DB.settings.asdHighlight||'')+'" placeholder="es. Sile Walking"></div></div><button class="btn bp" onclick="saveSettings()">&#x1F4BE; Salva impostazioni</button><div class="div"></div>'+anomHtml+'<div class="card" style="border-color:rgba(230,51,41,.3)"><div class="ct" style="color:var(--red2)">&#x26A0;&#xFE0F; Gestione dati</div><p style="color:var(--tx2);font-size:13px;margin-bottom:16px">Database: <strong>'+Object.keys(DB.results).length+' classifiche</strong> salvate.</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn bs2" onclick="expFullDB()">&#x1F4CA; Export completo DB</button><button class="btn bg" style="color:var(--red);border-color:var(--red)" onclick="confirmReset()">&#x1F5D1;&#xFE0F; Cancella tutti i dati</button></div></div></div>';
 }
 
 function saveSettings(){
@@ -921,6 +1048,11 @@ function saveSettings(){
   saveSettings2();
   var btn=document.querySelector('#v-settings .btn.bp');
   if(btn){btn.textContent='Salvato!';setTimeout(function(){btn.textContent='Salva impostazioni';},2000);}
+}
+
+function ignoreAnomalyAndRefresh(n1,n2){
+  ignoreAnomaly(n1,n2);
+  renderSettings();
 }
 
 function confirmReset(){if(confirm('Cancellare tutti i dati? Operazione non reversibile.')){deleteAllResults().then(function(){renderSettings();});}}
@@ -932,7 +1064,7 @@ function expCSV(){
   var lines=[['POS','Atleta/Coppia','ASD','Tappe','Totale'].join(';')];
   rows.forEach(function(r){lines.push([r.pos,r.display,r.assoc,r.stages.length,r.total.toFixed(3).replace('.',',')].join(';'));});
   var blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});
-  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='NWS2026_'+CIR[cir].name.replace(/\s/g,'_')+'_'+catObj.name.replace(/\s/g,'_')+'.csv';a.click();
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=expFilename('csv');a.click();
 }
 
 function expXLS(){
@@ -942,19 +1074,32 @@ function expXLS(){
   var stgs=STAGES.filter(function(s){return s.circuits.indexOf(cir)>=0&&s.id!=='san-dona';});
   var data=[['POS','Atleta/Coppia','ASD','Tappe','Totale'].concat(stgs.map(function(s){return s.name+(s.jollyFor.indexOf(cir)>=0?'(J)':'');}))];
   rows.forEach(function(r){var spts=stgs.map(function(s){var sp=null;for(var k=0;k<r.stages.length;k++){if(r.stages[k].stageId===s.id){sp=r.stages[k];break;}}return sp?sp.ptsUsed:'';});data.push([r.pos,r.display,r.assoc,r.stages.length,+r.total.toFixed(3)].concat(spts));});
-  var wb=XLSX.utils.book_new();var ws=XLSX.utils.aoa_to_sheet(data);XLSX.utils.book_append_sheet(wb,ws,catObj.name.substring(0,31));XLSX.writeFile(wb,'NWS2026_'+CIR[cir].name.replace(/\s/g,'_')+'_'+catObj.name.replace(/\s/g,'_')+'.xlsx');
+  var wb=XLSX.utils.book_new();var ws=XLSX.utils.aoa_to_sheet(data);XLSX.utils.book_append_sheet(wb,ws,catObj.name.substring(0,31));XLSX.writeFile(wb,expFilename('xlsx'));
+}
+
+function expFilename(ext){
+  var cirName=CIR[clState.circuit].name.replace(/\s/g,'-').replace(/[^\w-]/g,'');
+  var catLabel;
+  if(clState.showASD){
+    catLabel='Classifica-ASD';
+  } else {
+    var catObj=CATS.find(function(c){return c.id===clState.cat;});
+    catLabel=catObj?catObj.name.replace(/\s/g,'-').replace(/[^\w-]/g,''):'';
+  }
+  var date=new Date().toISOString().split('T')[0];
+  return 'NWS2026_'+cirName+'_'+catLabel+'_'+date+'.'+ext;
 }
 
 function expImg(){
   var el=document.getElementById('exp-wrap');
   if(!el||typeof html2canvas==='undefined')return;
-  html2canvas(el,{backgroundColor:'#131929',scale:2}).then(function(canvas){var a=document.createElement('a');a.href=canvas.toDataURL('image/png');a.download='NWS2026_'+CIR[clState.circuit].name+'_'+new Date().toISOString().split('T')[0]+'.png';a.click();});
+  html2canvas(el,{backgroundColor:'#ffffff',scale:2}).then(function(canvas){var a=document.createElement('a');a.href=canvas.toDataURL('image/png');a.download=expFilename('png');a.click();});
 }
 
 function expPDF(){
   var el=document.getElementById('exp-wrap');
   if(!el||typeof html2canvas==='undefined'||typeof jspdf==='undefined')return;
-  html2canvas(el,{backgroundColor:'#131929',scale:2}).then(function(canvas){var pdfLib=jspdf;var pdf=new pdfLib.jsPDF({orientation:'landscape',unit:'mm',format:'a4'});var w=pdf.internal.pageSize.getWidth();pdf.addImage(canvas.toDataURL('image/png'),'PNG',0,0,w,canvas.height*w/canvas.width);pdf.save('NWS2026_'+CIR[clState.circuit].name+'_'+new Date().toISOString().split('T')[0]+'.pdf');});
+  html2canvas(el,{backgroundColor:'#ffffff',scale:2}).then(function(canvas){var pdfLib=jspdf;var pdf=new pdfLib.jsPDF({orientation:'landscape',unit:'mm',format:'a4'});var w=pdf.internal.pageSize.getWidth();pdf.addImage(canvas.toDataURL('image/png'),'PNG',0,0,w,canvas.height*w/canvas.width);pdf.save(expFilename('pdf'));});
 }
 
 function expFullDB(){
