@@ -232,13 +232,19 @@ function getStandings(cirId,catId){
 }
 
 function norm(s){return (s||'').trim().toLowerCase();}
+function normPerson(s){
+  // Normalize a single person name: split into words, sort alphabetically, rejoin
+  return (s||'').trim().toLowerCase().split(/\s+/).filter(Boolean).sort().join(' ');
+}
 function pairKey(a,b){
-  var na=norm(a||''), nb=norm(b||'');
+  var na=normPerson(a), nb=normPerson(b);
   return na<=nb ? na+'/'+nb : nb+'/'+na;
 }
 function pairDisplay(a,b){
-  var na=(a||'').trim(), nb=(b||'').trim();
-  return norm(a)<=norm(b) ? na+' / '+nb : nb+' / '+na;
+  // For display: keep the first occurrence as-is, just sort the pair order
+  var na=normPerson(a), nb=normPerson(b);
+  var da=(a||'').trim(), db=(b||'').trim();
+  return na<=nb ? da+' / '+db : db+' / '+da;
 }
 function levenshtein(a,b){
   a=(a||'').toLowerCase(); b=(b||'').toLowerCase();
