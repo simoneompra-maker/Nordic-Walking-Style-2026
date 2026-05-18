@@ -95,6 +95,7 @@ tbody tr.hl:hover{background:rgba(230,51,41,.12)!important}
       <button class="nb" onclick="goTab('upload')" id="t-upload"><span class="dot" style="background:#60a5fa"></span>Carica Tappa</button>
       <button class="nb" onclick="goTab('classifiche')" id="t-classifiche"><span class="dot" style="background:#22d3ee"></span>Classifiche</button>
       <button class="nb" onclick="goTab('finalissima')" id="t-finalissima"><span class="dot" style="background:#fbbf24"></span>Finalissima</button>
+      <button class="nb" onclick="goTab('atleta')" id="t-atleta"><span class="dot" style="background:#8b5cf6"></span>Atleta</button>
       <button class="nb" onclick="goTab('asd')" id="t-asd"><span class="dot" style="background:#34d399"></span>ASD</button>
 
       <button class="nb" onclick="goTab('settings')" id="t-settings"><span class="dot" style="background:#a78bfa"></span>Impostazioni</button>
@@ -105,6 +106,7 @@ tbody tr.hl:hover{background:rgba(230,51,41,.12)!important}
     <div id="v-upload" style="display:none"></div>
     <div id="v-classifiche" style="display:none"></div>
     <div id="v-finalissima" style="display:none"></div>
+    <div id="v-atleta" style="display:none"></div>
     <div id="v-asd" style="display:none"></div>
 
     <div id="v-settings" style="display:none"></div>
@@ -350,6 +352,7 @@ function goTab(tab){
   else if(tab==='upload')renderUpload();
   else if(tab==='classifiche')renderClass();
   else if(tab==='finalissima')renderFin();
+  else if(tab==='atleta')renderAtleta();
   else if(tab==='asd')renderASD();
   else if(tab==='settings')renderSettings();
 }
@@ -713,6 +716,261 @@ function buildASDSum(){
 }
 
 
+
+// PROFILO ATLETA
+var atState={query:'',selected:null};
+
+function getAllAthletes(){
+  var indCats=CATS.filter(function(c){return c.type==='ind';});
+  var map={};
+  indCats.forEach(function(cat){
+    Object.values(DB.results).forEach(function(res){
+      if(res.catId!==cat.id)return;
+      res.rows.forEach(function(row){
+        var key=norm(row.cognome||'')+' '+norm(row.nome||'')+'__'+cat.id;
+        if(!map[key]){
+          map[key]={
+            key:key,
+            display:((row.cognome||'')+' '+(row.nome||'')).trim(),
+            cognome:row.cognome||'',
+            nome:row.nome||'',
+            assoc:row.assoc||'',
+            catId:cat.id,
+            catName:cat.name
+          };
+        } else if(row.assoc) {
+          map[key].assoc=row.assoc;
+        }
+      });
+    });
+  });
+  return Object.values(map).sort(function(a,b){return a.display.localeCompare(b.display);});
+}
+
+function searchAthletes(query){
+  var q=(query||'').trim().toLowerCase();
+  var all=getAllAthletes();
+  if(!q)return all.slice(0,50);
+  return all.filter(function(a){
+    return a.display.toLowerCase().indexOf(q)>=0 || a.assoc.toLowerCase().indexOf(q)>=0;
+  }).slice(0,30);
+}
+
+function getAthleteHistory(athlete){
+  var history=[];
+  STAGES.forEach(function(st){
+    if(st.id==='san-dona')return;
+    var res=getRes(st.id,athlete.catId);
+    if(!res)return;
+    for(var i=0;i<res.rows.length;i++){
+      var r=res.rows[i];
+      if(norm(r.cognome||'')===norm(athlete.cognome)&&norm(r.nome||'')===norm(athlete.nome)){
+        history.push({
+          stageId:st.id,
+          stageName:st.name,
+          stageDate:st.date,
+          circuits:st.circuits,
+          jollyFor:st.jollyFor,
+          pos:r.pos,
+          tot:r.tot,
+          pts:r.pts,
+          ptsNum:pfloat(r.pts)
+        });
+        break;
+      }
+    }
+  });
+  return history;
+}
+
+function getAthleteCircuit(asd){
+  var c=getASDCircuito(asd);
+  if(c==='nd'||c==='tutti')return null;
+  return c;
+}
+
+function getAthleteCurrentRank(athlete){
+  var cir=getAthleteCircuit(athlete.assoc);
+  if(!cir)return null;
+  var standings=getStandings(cir,athlete.catId);
+  var key=norm(athlete.cognome)+' '+norm(athlete.nome);
+  for(var i=0;i<standings.length;i++){
+    if(standings[i].key===key){
+      return {pos:standings[i].pos,total:standings[i].total,circuit:cir,allStandings:standings};
+    }
+  }
+  return null;
+}
+
+function getQualThreshold(catId, cirId){
+  if(catId==='camminatore-f'){
+    if(cirId==='sic')return 10;
+    return 15;
+  }
+  if(cirId==='sic')return 5;
+  return 10;
+}
+
+function renderAtleta(){
+  var el=document.getElementById('v-atleta');
+  var q=atState.query;
+  var results=searchAthletes(q);
+  
+  var listHtml='';
+  if(results.length===0){
+    listHtml='<div class="se">Nessun atleta trovato</div>';
+  } else {
+    listHtml=results.map(function(a){
+      var isSel=atState.selected&&atState.selected.key===a.key;
+      return '<div class="atl-item" onclick="selectAtleta(this)" data-key="'+a.key.replace(/"/g,'&quot;')+'" style="padding:10px 14px;border:1px solid '+(isSel?'#8b5cf6':'var(--brd)')+';border-radius:8px;margin-bottom:6px;cursor:pointer;background:'+(isSel?'rgba(139,92,246,.08)':'transparent')+'">'+
+        '<div style="font-weight:600;color:var(--tx)">'+a.display+'</div>'+
+        '<div style="font-size:11px;color:var(--tx3);margin-top:2px">'+a.assoc+' &middot; '+a.catName+'</div>'+
+        '</div>';
+    }).join('');
+  }
+  
+  var detailHtml='';
+  if(atState.selected){
+    detailHtml=buildAtletaDetail(atState.selected);
+  } else {
+    detailHtml='<div style="text-align:center;padding:60px 20px;color:var(--tx3)"><div style="font-size:48px;margin-bottom:12px">&#x1F3C3;</div><div>Cerca un atleta a sinistra per vedere il profilo</div></div>';
+  }
+  
+  el.innerHTML='<h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:16px">PROFILO <span style="color:#8b5cf6">ATLETA</span></h2>'+
+    '<div style="display:grid;grid-template-columns:340px 1fr;gap:20px" class="atl-grid">'+
+    '<div><div class="card"><div class="fg"><label>Cerca per nome o ASD</label><input type="text" id="at-search" value="'+q.replace(/"/g,'&quot;')+'" placeholder="es. taffarello, sile walking..." oninput="atState.query=this.value;renderAtletaList()"></div><div id="at-list" style="max-height:560px;overflow-y:auto">'+listHtml+'</div></div></div>'+
+    '<div id="at-detail">'+detailHtml+'</div>'+
+    '</div>';
+  
+  setTimeout(function(){
+    var inp=document.getElementById('at-search');
+    if(inp&&document.activeElement!==inp){
+      inp.focus();
+      var v=inp.value;
+      inp.setSelectionRange(v.length,v.length);
+    }
+  },10);
+}
+
+function renderAtletaList(){
+  var listEl=document.getElementById('at-list');
+  if(!listEl)return;
+  var results=searchAthletes(atState.query);
+  if(results.length===0){
+    listEl.innerHTML='<div class="se">Nessun atleta trovato</div>';
+    return;
+  }
+  listEl.innerHTML=results.map(function(a){
+    var isSel=atState.selected&&atState.selected.key===a.key;
+    return '<div class="atl-item" onclick="selectAtleta(this)" data-key="'+a.key.replace(/"/g,'&quot;')+'" style="padding:10px 14px;border:1px solid '+(isSel?'#8b5cf6':'var(--brd)')+';border-radius:8px;margin-bottom:6px;cursor:pointer;background:'+(isSel?'rgba(139,92,246,.08)':'transparent')+'">'+
+      '<div style="font-weight:600;color:var(--tx)">'+a.display+'</div>'+
+      '<div style="font-size:11px;color:var(--tx3);margin-top:2px">'+a.assoc+' &middot; '+a.catName+'</div>'+
+      '</div>';
+  }).join('');
+}
+
+function selectAtleta(elem){
+  var key=elem.dataset.key;
+  var all=getAllAthletes();
+  var found=all.find(function(a){return a.key===key;});
+  if(found){
+    atState.selected=found;
+    renderAtleta();
+  }
+}
+
+function buildAtletaDetail(athlete){
+  var history=getAthleteHistory(athlete);
+  var rank=getAthleteCurrentRank(athlete);
+  var cir=getAthleteCircuit(athlete.assoc);
+  
+  var nStages=history.length;
+  var totalPts=history.reduce(function(s,h){return s+h.ptsNum;},0);
+  var avgPos=nStages?(history.reduce(function(s,h){return s+h.pos;},0)/nStages).toFixed(1):'-';
+  var bestPos=nStages?Math.min.apply(null,history.map(function(h){return h.pos;})):'-';
+  var worstPos=nStages?Math.max.apply(null,history.map(function(h){return h.pos;})):'-';
+  
+  var headerHtml='<div class="card" style="margin-bottom:16px;border-left:4px solid #8b5cf6">'+
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">'+
+    '<div>'+
+    '<div style="font-family:var(--fh);font-weight:800;font-size:24px;color:var(--tx)">'+athlete.display+'</div>'+
+    '<div style="color:var(--tx2);font-size:14px;margin-top:4px">'+athlete.assoc+'</div>'+
+    '<div style="margin-top:8px"><span style="display:inline-block;padding:3px 10px;background:rgba(139,92,246,.1);color:#8b5cf6;border-radius:12px;font-size:11px;font-weight:600">'+athlete.catName+'</span>'+
+    (cir?' <span style="display:inline-block;padding:3px 10px;background:'+CIR[cir].color+'22;color:'+CIR[cir].color+';border-radius:12px;font-size:11px;font-weight:600;margin-left:6px">'+CIR[cir].name+'</span>':'')+
+    '</div></div>'+
+    (rank?'<div style="text-align:right"><div style="font-size:11px;color:var(--tx3);text-transform:uppercase;letter-spacing:1px">Pos. classifica</div><div style="font-family:var(--fh);font-weight:800;font-size:36px;color:'+CIR[cir].color+';line-height:1">'+rank.pos+'<span style="font-size:18px">&deg;</span></div><div style="font-size:13px;color:var(--tx2);margin-top:2px">'+rank.total.toFixed(2).replace('.',',')+' pt</div></div>':'')+
+    '</div></div>';
+  
+  var statsHtml='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px">'+
+    '<div class="card" style="margin:0;text-align:center"><div style="font-size:11px;color:var(--tx3);text-transform:uppercase">Tappe</div><div style="font-family:var(--fh);font-weight:800;font-size:32px;color:var(--tx)">'+nStages+'</div></div>'+
+    '<div class="card" style="margin:0;text-align:center"><div style="font-size:11px;color:var(--tx3);text-transform:uppercase">Pos. media</div><div style="font-family:var(--fh);font-weight:800;font-size:32px;color:var(--tx)">'+avgPos+'</div></div>'+
+    '<div class="card" style="margin:0;text-align:center"><div style="font-size:11px;color:var(--tx3);text-transform:uppercase">Migliore</div><div style="font-family:var(--fh);font-weight:800;font-size:32px;color:var(--grn)">'+bestPos+(typeof bestPos==='number'?'&deg;':'')+'</div></div>'+
+    '<div class="card" style="margin:0;text-align:center"><div style="font-size:11px;color:var(--tx3);text-transform:uppercase">Peggiore</div><div style="font-family:var(--fh);font-weight:800;font-size:32px;color:var(--tx2)">'+worstPos+(typeof worstPos==='number'?'&deg;':'')+'</div></div>'+
+    '</div>';
+  
+  var historyHtml='';
+  if(history.length){
+    var histRows=history.map(function(h){
+      var jollyMark=cir&&h.jollyFor.indexOf(cir)>=0?' <span style="color:var(--cs);font-size:10px;font-weight:700">JOLLY x2</span>':'';
+      var medal=h.pos<=3?(h.pos===1?'&#x1F947;':h.pos===2?'&#x1F948;':'&#x1F949;'):'';
+      return '<tr><td style="padding:8px 12px">'+fmtDs(h.stageDate)+'</td>'+
+        '<td style="padding:8px 12px;font-weight:500">'+h.stageName+jollyMark+'</td>'+
+        '<td style="padding:8px 12px;text-align:center"><strong>'+h.pos+'&deg;</strong> '+medal+'</td>'+
+        '<td style="padding:8px 12px;text-align:right">'+h.tot+'</td>'+
+        '<td style="padding:8px 12px;text-align:right;color:var(--red);font-weight:600">'+h.pts+'</td>'+
+        '</tr>';
+    }).join('');
+    historyHtml='<div class="card" style="margin-bottom:16px"><div class="ct">&#x1F4CA; Storico tappe</div><div class="tw"><table width="100%"><thead><tr><th style="text-align:left">Data</th><th style="text-align:left">Tappa</th><th style="text-align:center">Pos.</th><th style="text-align:right">Voti</th><th style="text-align:right">Punti</th></tr></thead><tbody>'+histRows+'</tbody></table></div></div>';
+  }
+  
+  var finHtml='';
+  if(rank&&cir){
+    var threshold=getQualThreshold(athlete.catId,cir);
+    var qualified=rank.pos<=threshold;
+    var standings=rank.allStandings;
+    
+    var distanceHtml='';
+    if(qualified){
+      var nextBehind=standings[threshold];
+      if(nextBehind){
+        var gap=(rank.total-nextBehind.total).toFixed(2).replace('.',',');
+        distanceHtml='<div style="margin-top:8px;font-size:13px;color:var(--tx2)">Vantaggio sul '+(threshold+1)+'&deg;: <strong style="color:var(--grn)">+'+gap+' pt</strong></div>';
+      }
+    } else {
+      var cutoff=standings[threshold-1];
+      if(cutoff){
+        var gap=(cutoff.total-rank.total).toFixed(2).replace('.',',');
+        distanceHtml='<div style="margin-top:8px;font-size:13px;color:var(--tx2)">Per qualificarti devi recuperare: <strong style="color:var(--red)">'+gap+' pt</strong> sul '+threshold+'&deg; posto</div>';
+      }
+    }
+    
+    var stgs=STAGES.filter(function(s){return s.circuits.indexOf(cir)>=0&&s.id!=='san-dona';});
+    var done={};history.forEach(function(h){done[h.stageId]=true;});
+    var remaining=stgs.filter(function(s){return !done[s.id];});
+    
+    var remHtml='';
+    if(remaining.length){
+      remHtml='<div style="margin-top:12px;font-size:13px;color:var(--tx2)">Tappe rimanenti: '+remaining.map(function(s){return s.name+(s.jollyFor.indexOf(cir)>=0?' (Jolly)':'');}).join(', ')+'</div>';
+    } else {
+      remHtml='<div style="margin-top:12px;font-size:13px;color:var(--tx3)">Tutte le tappe del circuito disputate</div>';
+    }
+    
+    finHtml='<div class="card" style="border-left:4px solid '+(qualified?'var(--grn)':'var(--red)')+'">'+
+      '<div class="ct">&#x1F3C6; Qualificazione Finalissima</div>'+
+      '<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">'+
+      '<div style="font-size:32px">'+(qualified?'&#x2705;':'&#x26A0;&#xFE0F;')+'</div>'+
+      '<div style="flex:1;min-width:200px">'+
+      '<div style="font-weight:600;font-size:15px;color:'+(qualified?'var(--grn)':'var(--red)')+'">'+(qualified?'Qualificato':'Fuori qualificazione')+'</div>'+
+      '<div style="font-size:13px;color:var(--tx2);margin-top:2px">Posizione attuale '+rank.pos+'&deg; &middot; Soglia: top '+threshold+'</div>'+
+      distanceHtml+
+      remHtml+
+      '</div></div></div>';
+  } else if(!cir) {
+    finHtml='<div class="al ai">L\'ASD di questo atleta non e ancora stata assegnata a un circuito. Vai nella tab <strong>ASD</strong> per assegnarla.</div>';
+  }
+  
+  return headerHtml+statsHtml+historyHtml+finHtml;
+}
 
 // ── PUNTEGGI POSIZIONE ────────────────────────────────────────
 var POS_POINTS=[100,95,90,85,80,75,70,65,60,55];
