@@ -886,9 +886,9 @@ function buildAtletaDetail(athlete){
   
   var nStages=history.length;
   var totalPts=history.reduce(function(s,h){return s+h.ptsNum;},0);
-  var avgPos=nStages?(history.reduce(function(s,h){return s+h.pos;},0)/nStages).toFixed(1):'-';
-  var bestPos=nStages?Math.min.apply(null,history.map(function(h){return h.pos;})):'-';
-  var worstPos=nStages?Math.max.apply(null,history.map(function(h){return h.pos;})):'-';
+  var avgPos=nStages?(history.reduce(function(s,h){return s+(+h.pos||0);},0)/nStages).toFixed(1):'-';
+  var bestPos=nStages?Math.min.apply(null,history.map(function(h){return +h.pos||999;})):'-';
+  var worstPos=nStages?Math.max.apply(null,history.map(function(h){return +h.pos||0;})):'-';
   
   var headerHtml='<div class="card" style="margin-bottom:16px;border-left:4px solid #8b5cf6">'+
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px">'+
