@@ -200,6 +200,7 @@ async function deleteAllResults(){
   DB.results={};
 }
 
+// ── FIX 1: getStandings con filtro TI rigoroso ───────────────
 function getStandings(cirId,catId){
   var cat=CATS.find(function(c){return c.id===catId;});
   var stgs=STAGES.filter(function(s){return s.circuits.indexOf(cirId)>=0&&s.id!=='san-dona';});
@@ -211,16 +212,22 @@ function getStandings(cirId,catId){
     var jolly=st.jollyFor.indexOf(cirId)>=0;
     for(var ri=0;ri<res.rows.length;ri++){
       var row=res.rows[ri];
-      // Filter by ASD circuit if assigned (skip for 'ti' - Tappa Italia shows all)
+      // Filtro per circuito ASD
       if(cirId!=='ti'){
         var asdCir=getASDCircuito(row.assoc||'');
-        if(asdCir!=='nd'&&asdCir!=='tutti'&&asdCir!==cirId) continue;
+        if(isTappaItalia(st.id)){
+          // TI: includi SOLO se ASD è esplicitamente assegnata a questo circuito
+          // (esclude assoc vuoto/'nd' → evita atleti di altri circuiti con assoc mancante)
+          if(asdCir!=='tutti'&&asdCir!==cirId) continue;
+        } else {
+          // Tappe normali: escludi solo se assegnata a un ALTRO circuito noto
+          if(asdCir!=='nd'&&asdCir!=='tutti'&&asdCir!==cirId) continue;
+        }
       }
       var key=cat.type==='cop'
         ?pairKey(row.p1,row.p2)
         :norm(row.cognome||'')+' '+norm(row.nome||'');
       if(!map[key])map[key]={key:key,display:cat.type==='cop'?pairDisplay(row.p1,row.p2):(row.cognome||'')+' '+(row.nome||''),assoc:row.assoc||'',stages:[],total:0};
-      // ── PATCH: usa punti-posizione invece del punteggio tecnico grezzo ──
       var pts=isTappaItalia(st.id)?posToPointsTI(row.pos):posToPoints(row.pos);
       var used=jolly?pts*2:pts;
       map[key].stages.push({stageId:st.id,stageName:st.name,pts:pts,ptsUsed:used,isJolly:jolly});
@@ -336,7 +343,8 @@ function isASD(a){if(!DB.settings.asdHighlight||!a)return false;return a.toLower
 
 var activeTab='dashboard';
 var clState={circuit:'nord',cat:'istruttore-m',showASD:false};
-var fnState={circuit:'nord',cat:'istruttore-m'};
+// FIX 3: fnState esteso con asdQuery e asdSelected
+var fnState={circuit:'nord',cat:'istruttore-m',asdQuery:'',asdSelected:''};
 var upState={stage:'',cat:''};
 
 function goTab(tab){
@@ -745,28 +753,55 @@ function buildStTable(cirId,catId){
   return '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap"><span style="font-family:var(--fh);font-weight:700;font-size:18px">'+cat.name+' &ndash; '+c.name+'</span>'+(qlim?'<span style="font-size:12px;color:var(--tx3);margin-left:auto">Finalissima: top <strong>'+qlim+'</strong></span>':'')+'</div><div class="tw"><table><thead><tr><th>POS</th><th>'+(isCop?'Coppia':'Atleta')+'</th><th>ASD</th><th>Tap.</th>'+stgCols+'<th>TOTALE</th></tr></thead><tbody>'+bodyRows+'</tbody></table></div><div style="margin-top:10px;font-size:11px;color:var(--tx3)">&#x2605; = Tappa Jolly (punti &times;2) &mdash; Punteggi posizione: 1°=100, 2°=95...10°=55, dall\'11°=54 poi -1. Tappa Italia: 1°=100, 2°=99...</div>';
 }
 
+// FIX 2: buildStageDetail esclude bologna-ti dal dettaglio dei circuiti specifici
 function buildStageDetail(cirId,catId){
   var cat=CATS.find(function(x){return x.id===catId;});
   var isCop=cat.type==='cop';
-  var stgs=STAGES.filter(function(s){return s.circuits.indexOf(cirId)>=0&&s.id!=='san-dona'&&hasRes(s.id,catId);});
+  var stgs=STAGES.filter(function(s){
+    if(s.id==='san-dona')return false;
+    if(!hasRes(s.id,catId))return false;
+    // TI non appare nel dettaglio grezzo dei circuiti specifici (ha il suo circuit='ti')
+    if(cirId!=='ti'&&isTappaItalia(s.id))return false;
+    return s.circuits.indexOf(cirId)>=0;
+  });
   if(!stgs.length)return '';
   var tabs=stgs.map(function(s,i){return '<button class="tb'+(i===0?' active':'')+'" onclick="showSD(this,\'sd-'+s.id+'\')">'+s.name+(s.jollyFor.indexOf(cirId)>=0?' &#x2B50;':'')+'</button>';}).join('');
   var panels=stgs.map(function(s,i){
     var res=getRes(s.id,catId);
     var bodyRows=res.rows.map(function(r){return '<tr class="'+(isASD(r.assoc)?'hl':'')+'"><td><span class="pb p'+(r.pos<4?r.pos:'x')+'">'+r.pos+'</span></td>'+(isCop?'<td>'+(r.p1||'')+'</td><td>'+(r.p2||'')+'</td>':'<td>'+(r.cognome||'')+'</td><td>'+(r.nome||'')+'</td>')+'<td style="font-size:12px;color:'+(isASD(r.assoc)?'var(--red)':'var(--tx2)')+'">'+r.assoc+'</td><td style="color:var(--tx2);font-size:12px">'+r.tot+'</td><td class="pts">'+r.pts+'</td></tr>';}).join('');
-    return '<div id="sd-'+s.id+'" style="display:'+(i===0?'block':'none')+'"><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap"><span style="font-size:12px;color:var(--tx3)">'+fmtDs(s.date)+'</span>'+(s.jollyFor.indexOf(cirId)>=0?'<span class="badge" style="background:rgba(230,51,41,.2);color:var(--red2)">JOLLY &times;2</span>':'')+'<span style="font-size:12px;color:var(--tx3);margin-left:auto">Salvato: '+fmtDT(res.savedAt)+'</span></div><div class="tw"><table><thead><tr><th>POS</th>'+(isCop?'<th>P1</th><th>P2</th>':'<th>Cognome</th><th>Nome</th>')+'<th>ASD</th><th>Tot. giudici</th><th>Punti tecnici</th></tr></thead><tbody>'+bodyRows+'</tbody></table></div></div>';
+    return '<div id="sd-'+s.id+'" style="display:'+(i===0?'block':'none')+'"><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap"><span style="font-size:12px;color:var(--tx3)">'+fmtDs(s.date)+'</span>'+(s.jollyFor.indexOf(cirId)>=0?'<span class="badge" style="background:rgba(230,51,41,.2);color:var(--red2)">JOLLY &times;2</span>':'')+'<span style="font-size:12px;color:var(--tx3)">Salvato: '+fmtDT(res.savedAt)+'</span><button class="btn bg bsm" style="margin-left:auto" onclick="editStageResult(\''+s.id+'\',\''+catId+'\')">&#x270F;&#xFE0F; Modifica</button></div><div class="tw"><table><thead><tr><th>POS</th>'+(isCop?'<th>P1</th><th>P2</th>':'<th>Cognome</th><th>Nome</th>')+'<th>ASD</th><th>Tot. giudici</th><th>Punti tecnici</th></tr></thead><tbody>'+bodyRows+'</tbody></table></div></div>';
   }).join('');
   return '<div class="card"><div class="ct">&#x1F4CB; Dettaglio per tappa <span style="font-size:11px;color:var(--tx3);font-weight:400">(dati grezzi OCR)</span></div><div class="tg">'+tabs+'</div>'+panels+'</div>';
 }
 
+// Apre il modal di revisione con i dati esistenti di una tappa per modificarli
+function editStageResult(stageId, catId){
+  var res=getRes(stageId, catId);
+  if(!res||!res.rows){alert('Nessun dato trovato per questa tappa.');return;}
+  showModal(JSON.parse(JSON.stringify(res.rows)), stageId, catId);
+}
+
 function showSD(btn,id){btn.closest('.card').querySelectorAll('[id^="sd-"]').forEach(function(d){d.style.display='none';});btn.closest('.card').querySelectorAll('.tb').forEach(function(b){b.classList.remove('active');});document.getElementById(id).style.display='block';btn.classList.add('active');}
 
+// FIX 3+4: renderFin con tracker nazionale e ricerca ASD
 function renderFin(){
   var el=document.getElementById('v-finalissima');
   var cir=fnState.circuit,cat=fnState.cat;
   var cirBtns=['nord','cs','sic'].map(function(c){return '<button class="tb'+(cir===c?' active':'')+'" style="'+(cir===c?'border-color:'+CIR[c].color+';color:'+CIR[c].color:'')+'" onclick="fnState.circuit=\''+c+'\';renderFin()">'+CIR[c].name+'</button>';}).join('');
   var catBtns=CATS.map(function(c){return '<button class="tb'+(cat===c.id?' active':'')+'" style="'+(cat===c.id?'border-color:'+CIR[cir].color+';color:'+CIR[cir].color:'')+'" onclick="fnState.cat=\''+c.id+'\';renderFin()">'+c.name+'</button>';}).join('');
-  el.innerHTML='<h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:16px">TRACKER <span style="color:var(--yel)">FINALISSIMA</span></h2><div class="al ai" style="margin-bottom:20px">&#x2139;&#xFE0F; Nord/C-Sud: Top 10 per categoria (Camminatrici F: top 15). Sicilia: Top 5 (Camminatrici F: top 10).</div><div class="tg">'+cirBtns+'</div><div class="tg">'+catBtns+'</div><div class="card">'+buildFinTable(cir,cat)+'</div>'+buildASDSum();
+  el.innerHTML=
+    '<h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:16px">TRACKER <span style="color:var(--yel)">FINALISSIMA</span></h2>'+
+    '<div class="al ai" style="margin-bottom:20px">&#x2139;&#xFE0F; Nord/C-Sud: Top 10 per categoria (Camminatrici F: top 15). Sicilia: Top 5 (Camminatrici F: top 10).</div>'+
+    '<div class="tg">'+cirBtns+'</div>'+
+    '<div class="tg">'+catBtns+'</div>'+
+    '<div class="card" style="margin-bottom:20px">'+buildFinTable(cir,cat)+'</div>'+
+    buildNationalTracker(cat)+
+    buildASDSearch();
+  // Ripristina focus sull'input di ricerca se era attivo
+  setTimeout(function(){
+    var inp=document.getElementById('fn-asd-input');
+    if(inp&&fnState.asdQuery&&!fnState.asdSelected){inp.focus();}
+  },10);
 }
 
 function buildFinTable(cirId,catId){
@@ -779,20 +814,154 @@ function buildFinTable(cirId,catId){
   return '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap"><span style="font-family:var(--fh);font-weight:700;font-size:18px">'+cat.name+' &ndash; '+c.name+'</span><span style="margin-left:auto;font-size:12px;color:var(--tx3)">Accesso: top <strong style="color:var(--yel)">'+qlim+'</strong></span></div><div class="tw"><table><thead><tr><th>POS</th><th>'+(isCop?'Coppia':'Atleta')+'</th><th>ASD</th><th>Tap.</th><th>Totale</th><th>Finalissima</th></tr></thead><tbody>'+bodyRows+'</tbody></table></div>';
 }
 
-function buildASDSum(){
-  var asd=DB.settings.asdHighlight;
-  if(!asd)return '';
+// FIX 4: Tracker Nazionale per categoria selezionata
+function buildNationalTracker(catId){
+  var cat=CATS.find(function(c){return c.id===catId;});
+  if(!cat)return '';
+  var isCop=cat.type==='cop';
+  var cols=['nord','cs','sic'];
+  var colHtml=cols.map(function(cirId){
+    var c=CIR[cirId];
+    var rows=getStandings(cirId,catId);
+    var qlim=QLIM[cirId]?QLIM[cirId][catId]||QLIM[cirId].def:10;
+    if(!rows.length){
+      return '<div class="card" style="margin:0;border-top:3px solid '+c.color+'">'+
+        '<div style="font-family:var(--fh);font-weight:700;font-size:14px;color:'+c.color+';margin-bottom:10px">'+c.name+'</div>'+
+        '<div class="se" style="padding:20px 0;font-size:12px">Nessun dato</div>'+
+        '</div>';
+    }
+    var bodyRows=rows.map(function(r,i){
+      var badge=i<qlim
+        ?'<span class="qy" style="font-size:10px;padding:1px 5px">Q</span>'
+        :i<qlim+5
+          ?'<span class="qm" style="font-size:10px;padding:1px 5px">~</span>'
+          :'';
+      return '<tr class="'+(isASD(r.assoc)?'hl':'')+'">'+
+        '<td style="padding:5px 8px;white-space:nowrap">'+
+          '<span class="pb p'+(i<3?i+1:'x')+'" style="width:20px;height:20px;font-size:11px">'+(i+1)+'</span>'+
+          ' '+badge+
+        '</td>'+
+        '<td style="padding:5px 8px;font-size:12px;font-weight:'+(isASD(r.assoc)?600:400)+';max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+r.display+'">'+r.display+'</td>'+
+        '<td style="padding:5px 8px;text-align:right;font-family:var(--fh);font-weight:700;font-size:13px;color:'+c.color+'">'+r.total+'</td>'+
+        '</tr>';
+    }).join('');
+    return '<div class="card" style="margin:0;border-top:3px solid '+c.color+'">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'+
+        '<span style="font-family:var(--fh);font-weight:700;font-size:14px;color:'+c.color+'">'+c.name+'</span>'+
+        '<span style="font-size:11px;color:var(--tx3)">top <strong>'+qlim+'</strong></span>'+
+      '</div>'+
+      '<div class="tw"><table width="100%"><tbody>'+bodyRows+'</tbody></table></div>'+
+      '</div>';
+  }).join('');
+  return '<div style="margin-bottom:20px">'+
+    '<div style="font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:12px">&#x1F30D; Tracker Nazionale &mdash; <span style="color:var(--red)">'+cat.name+'</span></div>'+
+    '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">'+colHtml+'</div>'+
+    '</div>';
+}
+
+// FIX 3: Ricerca ASD con autocomplete (sostituisce sezione fissa)
+function buildASDSearch(){
+  var q=fnState.asdQuery||'';
+  var sel=fnState.asdSelected||'';
+  var allASD=getAllASD().sort();
+  var filtered=q&&!sel
+    ?allASD.filter(function(a){return a.toLowerCase().indexOf(q.toLowerCase())>=0;}).slice(0,8)
+    :[];
+
+  var dropHtml='';
+  if(filtered.length){
+    dropHtml='<div style="position:absolute;top:100%;left:0;right:0;background:var(--s1);border:1px solid var(--brd);border-radius:0 0 8px 8px;z-index:100;box-shadow:0 4px 12px rgba(0,0,0,.15);overflow:hidden;margin-top:-2px">'+
+      filtered.map(function(a){
+        var safe=a.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;');
+        return '<div onclick="selectASDSearch(\''+safe+'\')" style="padding:10px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--brd)" onmouseover="this.style.background=\'var(--s2)\'" onmouseout="this.style.background=\'\'">'+a+'</div>';
+      }).join('')+
+    '</div>';
+  }
+
+  var resultsHtml='';
+  if(sel){
+    resultsHtml=buildASDQualTable(sel);
+  }
+
+  var clearBtn=sel||q
+    ?'<button onclick="fnState.asdQuery=\'\';fnState.asdSelected=\'\';renderFin()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--tx3);cursor:pointer;font-size:16px;line-height:1">&#x2715;</button>'
+    :'';
+
+  return '<div class="card" style="border-left:3px solid var(--grn)">'+
+    '<div style="font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:12px">&#x1F50D; Cerca ASD</div>'+
+    '<div style="position:relative;margin-bottom:'+(filtered.length?'0':'12')+'px">'+
+      '<input type="text" id="fn-asd-input" placeholder="Digita il nome della tua ASD..." value="'+q.replace(/"/g,'&quot;')+'" '+
+        'oninput="fnState.asdQuery=this.value;fnState.asdSelected=\'\';renderFin()" '+
+        'style="width:100%;padding:10px 36px 10px 12px;background:var(--s2);border:1px solid var(--brd);border-radius:'+(filtered.length?'8px 8px 0 0':'8px')+';color:var(--tx);font-size:13px;outline:none">'+
+      clearBtn+
+      dropHtml+
+    '</div>'+
+    (sel
+      ?'<div style="display:flex;align-items:center;gap:8px;margin:12px 0 10px">'+
+          '<span style="font-size:13px;font-weight:600;color:var(--tx)">'+sel+'</span>'+
+          '<span style="display:inline-block;padding:2px 8px;background:var(--grn)22;color:var(--grn);border-radius:10px;font-size:11px;font-weight:600">selezionata</span>'+
+        '</div>'+
+        resultsHtml
+      : (!q?'<p style="font-size:12px;color:var(--tx3);margin-top:4px">Inizia a digitare per cercare la tua ASD</p>':'')
+    )+
+  '</div>';
+}
+
+function selectASDSearch(asdName){
+  fnState.asdQuery=asdName;
+  fnState.asdSelected=asdName;
+  renderFin();
+}
+
+function buildASDQualTable(asdName){
   var found=[];
-  ['nord','cs','sic'].forEach(function(cid){
+  ['nord','cs','sic'].forEach(function(cirId){
     CATS.forEach(function(cat){
-      var rows=getStandings(cid,cat.id);
-      var qlim=QLIM[cid]?QLIM[cid][cat.id]||QLIM[cid].def:10;
-      rows.filter(function(r){return isASD(r.assoc);}).forEach(function(r){found.push(Object.assign({},r,{circuit:CIR[cid].name,cirId:cid,catName:cat.name,qlim:qlim}));});
+      var rows=getStandings(cirId,cat.id);
+      var qlim=QLIM[cirId]?QLIM[cirId][cat.id]||QLIM[cirId].def:10;
+      rows.filter(function(r){
+        return r.assoc.toLowerCase().indexOf(asdName.toLowerCase())>=0;
+      }).forEach(function(r){
+        found.push(Object.assign({},r,{cirId:cirId,catName:cat.name,catId:cat.id,qlim:qlim}));
+      });
     });
   });
-  if(!found.length)return '<div class="card" style="margin-top:20px;border-left:3px solid var(--red)"><div class="ct">&#x1F534; '+asd+'</div><div class="se">Nessun atleta trovato nei dati caricati.</div></div>';
-  var rows=found.map(function(r){return '<tr class="hl"><td style="font-weight:600">'+r.display+'</td><td><span style="color:'+CIR[r.cirId].color+'">'+r.circuit+'</span></td><td style="font-size:12px">'+r.catName+'</td><td><span class="pb p'+(r.pos<4?r.pos:'x')+'">'+r.pos+'</span></td><td class="pts">'+r.total+'</td><td>'+(r.pos<=r.qlim?'<span class="qy">&#x2705; QUALIFICATO</span>':r.pos<=r.qlim+5?'<span class="qm">&#x23F3; IN ZONA</span>':'<span class="qn">&mdash;</span>')+'</td></tr>';}).join('');
-  return '<div class="card" style="margin-top:20px;border-left:3px solid var(--red)"><div class="ct">&#x1F534; '+asd+' &ndash; Stato Qualificazione</div><div class="tw"><table><thead><tr><th>Atleta</th><th>Circuito</th><th>Categoria</th><th>POS</th><th>Totale</th><th>Finalissima</th></tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+  if(!found.length){
+    return '<div class="se" style="padding:24px 0">Nessun atleta trovato per questa ASD nei dati caricati.</div>';
+  }
+  found.sort(function(a,b){
+    var aQ=a.pos<=a.qlim?0:a.pos<=a.qlim+5?1:2;
+    var bQ=b.pos<=b.qlim?0:b.pos<=b.qlim+5?1:2;
+    if(aQ!==bQ)return aQ-bQ;
+    return a.pos-b.pos;
+  });
+  var rows=found.map(function(r){
+    return '<tr>'+
+      '<td style="padding:8px 12px;font-weight:600">'+r.display+'</td>'+
+      '<td style="padding:8px 12px"><span style="color:'+CIR[r.cirId].color+';font-size:12px;font-weight:600">'+CIR[r.cirId].name+'</span></td>'+
+      '<td style="padding:8px 12px;font-size:12px;color:var(--tx2)">'+r.catName+'</td>'+
+      '<td style="padding:8px 12px;text-align:center"><span class="pb p'+(r.pos<4?r.pos:'x')+'" style="width:22px;height:22px;font-size:12px">'+r.pos+'</span></td>'+
+      '<td style="padding:8px 12px;text-align:right;font-family:var(--fh);font-weight:700;color:'+CIR[r.cirId].color+'">'+r.total+'</td>'+
+      '<td style="padding:8px 12px">'+
+        (r.pos<=r.qlim
+          ?'<span class="qy">&#x2705; QUALIFICATO</span>'
+          :r.pos<=r.qlim+5
+            ?'<span class="qm">&#x23F3; IN ZONA</span>'
+            :'<span class="qn">&mdash;</span>')+
+      '</td>'+
+      '</tr>';
+  }).join('');
+  return '<div class="tw"><table width="100%">'+
+    '<thead><tr>'+
+      '<th>Atleta / Coppia</th>'+
+      '<th>Circuito</th>'+
+      '<th>Categoria</th>'+
+      '<th style="text-align:center">Pos.</th>'+
+      '<th style="text-align:right">Totale</th>'+
+      '<th>Finalissima</th>'+
+    '</tr></thead>'+
+    '<tbody>'+rows+'</tbody>'+
+    '</table></div>';
 }
 
 var atState={query:'',selected:null};
@@ -1062,7 +1231,6 @@ function posToPoints(pos){
   return Math.max(1, 54-(pos-11));
 }
 
-// Tappa Italia: 100 al 1°, poi -1 a scorrere
 function posToPointsTI(pos){
   if(pos<=0)return 0;
   return Math.max(1, 101-pos);
@@ -1089,7 +1257,11 @@ function getASDCircuitStandings(cirId){
         if(!asd)continue;
         if(cirId!=='ti'){
           var ac=getASDCircuito(asd);
-          if(ac!=='nd'&&ac!=='tutti'&&ac!==cirId)continue;
+          if(isTappaItalia(st.id)){
+            if(ac!=='tutti'&&ac!==cirId)continue;
+          } else {
+            if(ac!=='nd'&&ac!=='tutti'&&ac!==cirId)continue;
+          }
         }
         if(!asdMap[asd])asdMap[asd]={asd:asd,total:0,details:[]};
         var pts=isTappaItalia(st.id)?posToPointsTI(row.pos):posToPoints(row.pos);
