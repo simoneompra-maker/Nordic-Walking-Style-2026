@@ -101,6 +101,7 @@ tbody tr.hl:hover{background:rgba(230,51,41,.12)!important}
     </nav>
   </header>
   <main id="content">
+    <div id="public-banner" style="display:none;background:rgba(96,165,250,.1);border-bottom:1px solid rgba(96,165,250,.3);padding:8px 20px;font-size:12px;color:var(--ti);align-items:center;gap:8px;flex-shrink:0">&#x1F512; <strong>Modalità pubblica</strong> &mdash; sola lettura. Caricamento e modifiche disabilitati.</div>
     <div id="v-dashboard"></div>
     <div id="v-upload" style="display:none"></div>
     <div id="v-classifiche" style="display:none"></div>
@@ -363,6 +364,8 @@ function detectAllAnomalies(){
 function pfloat(s){return typeof s==='number'?s:parseFloat(String(s).replace(',','.'))||0;}
 function isASD(a){if(!DB.settings.asdHighlight||!a)return false;return a.toLowerCase().indexOf(DB.settings.asdHighlight.toLowerCase())>=0;}
 
+// Modalità pubblica: ?public=1 → sola lettura
+var PUBLIC_MODE=new URLSearchParams(window.location.search).get('public')==='1';
 var activeTab='dashboard';
 var clState={circuit:'nord',cat:'istruttore-m',showASD:false};
 // FIX 3: fnState esteso con asdQuery e asdSelected
@@ -370,6 +373,7 @@ var fnState={circuit:'nord',cat:'istruttore-m',asdQuery:'',asdSelected:''};
 var upState={stage:'',cat:''};
 
 function goTab(tab){
+  if(PUBLIC_MODE&&(tab==='upload'||tab==='settings'||tab==='asd'))return;
   document.querySelectorAll('.nb').forEach(function(b){b.classList.remove('active');});
   document.getElementById('t-'+tab).classList.add('active');
   document.querySelectorAll('#content>div').forEach(function(d){d.style.display='none';});
@@ -791,7 +795,7 @@ function buildStageDetail(cirId,catId){
   var panels=stgs.map(function(s,i){
     var res=getRes(s.id,catId);
     var bodyRows=res.rows.map(function(r){return '<tr class="'+(isASD(r.assoc)?'hl':'')+'"><td><span class="pb p'+(r.pos<4?r.pos:'x')+'">'+r.pos+'</span></td>'+(isCop?'<td>'+(r.p1||'')+'</td><td>'+(r.p2||'')+'</td>':'<td>'+(r.cognome||'')+'</td><td>'+(r.nome||'')+'</td>')+'<td style="font-size:12px;color:'+(isASD(r.assoc)?'var(--red)':'var(--tx2)')+'">'+r.assoc+'</td><td style="color:var(--tx2);font-size:12px">'+r.tot+'</td><td class="pts">'+r.pts+'</td></tr>';}).join('');
-    return '<div id="sd-'+s.id+'" style="display:'+(i===0?'block':'none')+'"><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap"><span style="font-size:12px;color:var(--tx3)">'+fmtDs(s.date)+'</span>'+(s.jollyFor.indexOf(cirId)>=0?'<span class="badge" style="background:rgba(230,51,41,.2);color:var(--red2)">JOLLY &times;2</span>':'')+'<span style="font-size:12px;color:var(--tx3)">Salvato: '+fmtDT(res.savedAt)+'</span><button class="btn bg bsm" style="margin-left:auto" onclick="editStageResult(\''+s.id+'\',\''+catId+'\')">&#x270F;&#xFE0F; Modifica</button></div><div class="tw"><table><thead><tr><th>POS</th>'+(isCop?'<th>P1</th><th>P2</th>':'<th>Cognome</th><th>Nome</th>')+'<th>ASD</th><th>Tot. giudici</th><th>Punti tecnici</th></tr></thead><tbody>'+bodyRows+'</tbody></table></div></div>';
+    return '<div id="sd-'+s.id+'" style="display:'+(i===0?'block':'none')+'"><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap"><span style="font-size:12px;color:var(--tx3)">'+fmtDs(s.date)+'</span>'+(s.jollyFor.indexOf(cirId)>=0?'<span class="badge" style="background:rgba(230,51,41,.2);color:var(--red2)">JOLLY &times;2</span>':'')+'<span style="font-size:12px;color:var(--tx3)">Salvato: '+fmtDT(res.savedAt)+'</span>'+(PUBLIC_MODE?'':'<button class="btn bg bsm" style="margin-left:auto" onclick="editStageResult(\\''+s.id+'\\',\\''+catId+'\\')">&#x270F;&#xFE0F; Modifica</button>')+'</div><div class="tw"><table><thead><tr><th>POS</th>'+(isCop?'<th>P1</th><th>P2</th>':'<th>Cognome</th><th>Nome</th>')+'<th>ASD</th><th>Tot. giudici</th><th>Punti tecnici</th></tr></thead><tbody>'+bodyRows+'</tbody></table></div></div>';
   }).join('');
   return '<div class="card"><div class="ct">&#x1F4CB; Dettaglio per tappa <span style="font-size:11px;color:var(--tx3);font-weight:400">(dati grezzi OCR)</span></div><div class="tg">'+tabs+'</div>'+panels+'</div>';
 }
@@ -1562,7 +1566,17 @@ function fmtDT(iso){try{return new Date(iso).toLocaleString('it-IT',{day:'2-digi
 function fmtDs(iso){try{return new Date(iso).toLocaleDateString('it-IT',{day:'2-digit',month:'short'});}catch(e){return iso;}}
 
 loadSettings();
-Promise.all([loadAllResults(), loadASDMap()]).then(function(){renderDash();});
+Promise.all([loadAllResults(), loadASDMap()]).then(function(){
+  if(PUBLIC_MODE){
+    ['t-upload','t-settings','t-asd'].forEach(function(id){
+      var el=document.getElementById(id);
+      if(el)el.style.display='none';
+    });
+    var banner=document.getElementById('public-banner');
+    if(banner)banner.style.display='flex';
+  }
+  renderDash();
+});
 </script>
 </body>
 </html>
