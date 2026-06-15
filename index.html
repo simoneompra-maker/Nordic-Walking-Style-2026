@@ -232,15 +232,14 @@ function getStandings(cirId,catId){
       if(cirId!=='ti'){
         var asdCir=getASDCircuito(row.assoc||'');
         if(isTappaItalia(st.id)){
-          // TI — priorità 1: ha tappe normali nel circuito → includi sempre
+          // TI: includi se ha tappe normali nel circuito OPPURE ASD esplicitamente del circuito/'tutti'
+          // ASD 'nd' (vuota) senza tappe normali → escludi (circuito non determinabile)
           var rowKey=cat.type==='cop'
             ?pairKey(row.p1,row.p2)
             :norm(row.cognome||'')+' '+norm(row.nome||'');
           if(!circuitKeys[rowKey]){
-            // Nessuna tappa normale: fallback su ASD
-            // Escludi solo se ASD è esplicitamente assegnata a un ALTRO circuito
-            if(asdCir!=='nd'&&asdCir!=='tutti'&&asdCir!==cirId) continue;
-            // ASD 'nd' (vuota/non assegnata) o 'tutti' o del circuito → includi
+            // Nessuna tappa normale → serve ASD esplicita del circuito
+            if(asdCir!=='tutti'&&asdCir!==cirId) continue;
           }
         } else {
           // Tappe normali: escludi solo se assegnata a un ALTRO circuito noto
