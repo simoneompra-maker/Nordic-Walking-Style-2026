@@ -795,9 +795,15 @@ function buildStageDetail(cirId,catId){
   var panels=stgs.map(function(s,i){
     var res=getRes(s.id,catId);
     var bodyRows=res.rows.map(function(r){return '<tr class="'+(isASD(r.assoc)?'hl':'')+'"><td><span class="pb p'+(r.pos<4?r.pos:'x')+'">'+r.pos+'</span></td>'+(isCop?'<td>'+(r.p1||'')+'</td><td>'+(r.p2||'')+'</td>':'<td>'+(r.cognome||'')+'</td><td>'+(r.nome||'')+'</td>')+'<td style="font-size:12px;color:'+(isASD(r.assoc)?'var(--red)':'var(--tx2)')+'">'+r.assoc+'</td><td style="color:var(--tx2);font-size:12px">'+r.tot+'</td><td class="pts">'+r.pts+'</td></tr>';}).join('');
-    return '<div id="sd-'+s.id+'" style="display:'+(i===0?'block':'none')+'"><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap"><span style="font-size:12px;color:var(--tx3)">'+fmtDs(s.date)+'</span>'+(s.jollyFor.indexOf(cirId)>=0?'<span class="badge" style="background:rgba(230,51,41,.2);color:var(--red2)">JOLLY &times;2</span>':'')+'<span style="font-size:12px;color:var(--tx3)">Salvato: '+fmtDT(res.savedAt)+'</span>'+(PUBLIC_MODE?'':'<button class="btn bg bsm" style="margin-left:auto" onclick="editStageResult(\\''+s.id+'\\',\\''+catId+'\\')">&#x270F;&#xFE0F; Modifica</button>')+'</div><div class="tw"><table><thead><tr><th>POS</th>'+(isCop?'<th>P1</th><th>P2</th>':'<th>Cognome</th><th>Nome</th>')+'<th>ASD</th><th>Tot. giudici</th><th>Punti tecnici</th></tr></thead><tbody>'+bodyRows+'</tbody></table></div></div>';
+    return '<div id="sd-'+s.id+'" style="display:'+(i===0?'block':'none')+'"><div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap"><span style="font-size:12px;color:var(--tx3)">'+fmtDs(s.date)+'</span>'+(s.jollyFor.indexOf(cirId)>=0?'<span class="badge" style="background:rgba(230,51,41,.2);color:var(--red2)">JOLLY &times;2</span>':'')+'<span style="font-size:12px;color:var(--tx3)">Salvato: '+fmtDT(res.savedAt)+'</span>'+editBtn(s.id,catId)+'</div><div class="tw"><table><thead><tr><th>POS</th>'+(isCop?'<th>P1</th><th>P2</th>':'<th>Cognome</th><th>Nome</th>')+'<th>ASD</th><th>Tot. giudici</th><th>Punti tecnici</th></tr></thead><tbody>'+bodyRows+'</tbody></table></div></div>';
   }).join('');
   return '<div class="card"><div class="ct">&#x1F4CB; Dettaglio per tappa <span style="font-size:11px;color:var(--tx3);font-weight:400">(dati grezzi OCR)</span></div><div class="tg">'+tabs+'</div>'+panels+'</div>';
+}
+
+// Bottone Modifica (nascosto in modalità pubblica)
+function editBtn(sid,cid){
+  if(PUBLIC_MODE)return '';
+  return '<button class="btn bg bsm" style="margin-left:auto" onclick="editStageResult(\''+sid+'\',\''+cid+'\')">&#x270F;&#xFE0F; Modifica</button>';
 }
 
 // Apre il modal di revisione con i dati esistenti di una tappa per modificarli
