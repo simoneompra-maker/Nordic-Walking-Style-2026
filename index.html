@@ -205,6 +205,22 @@ function getStandings(cirId,catId){
   var cat=CATS.find(function(c){return c.id===catId;});
   var stgs=STAGES.filter(function(s){return s.circuits.indexOf(cirId)>=0&&s.id!=='san-dona';});
   var map={};
+  // Pre-calcola le chiavi (nome/coppia) di chi ha già risultati nelle tappe NORMALI del circuito.
+  // Serve per la TI: se assoc è vuoto, includiamo nella classifica di un circuito solo
+  // chi ha disputato almeno una tappa normale di quel circuito.
+  var circuitKeys={};
+  if(cirId!=='ti'){
+    stgs.filter(function(s){return !isTappaItalia(s.id);}).forEach(function(s){
+      var r2=getRes(s.id,catId);
+      if(!r2)return;
+      r2.rows.forEach(function(row2){
+        var k=cat.type==='cop'
+          ?pairKey(row2.p1,row2.p2)
+          :norm(row2.cognome||'')+' '+norm(row2.nome||'');
+        circuitKeys[k]=true;
+      });
+    });
+  }
   for(var si=0;si<stgs.length;si++){
     var st=stgs[si];
     var res=getRes(st.id,catId);
@@ -216,9 +232,16 @@ function getStandings(cirId,catId){
       if(cirId!=='ti'){
         var asdCir=getASDCircuito(row.assoc||'');
         if(isTappaItalia(st.id)){
-          // TI: includi SOLO se ASD è esplicitamente assegnata a questo circuito
-          // (esclude assoc vuoto/'nd' → evita atleti di altri circuiti con assoc mancante)
-          if(asdCir!=='tutti'&&asdCir!==cirId) continue;
+          // TI — priorità 1: ha tappe normali nel circuito → includi sempre
+          var rowKey=cat.type==='cop'
+            ?pairKey(row.p1,row.p2)
+            :norm(row.cognome||'')+' '+norm(row.nome||'');
+          if(!circuitKeys[rowKey]){
+            // Nessuna tappa normale: fallback su ASD
+            // Escludi solo se ASD è esplicitamente assegnata a un ALTRO circuito
+            if(asdCir!=='nd'&&asdCir!=='tutti'&&asdCir!==cirId) continue;
+            // ASD 'nd' (vuota/non assegnata) o 'tutti' o del circuito → includi
+          }
         } else {
           // Tappe normali: escludi solo se assegnata a un ALTRO circuito noto
           if(asdCir!=='nd'&&asdCir!=='tutti'&&asdCir!==cirId) continue;
