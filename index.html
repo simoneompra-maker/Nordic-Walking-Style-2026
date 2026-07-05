@@ -361,6 +361,30 @@ function detectAllAnomalies(){
   });
   return results.sort(function(a,b){return b.score-a.score;});
 }
+function detectRepeatedNameAnomalies(){
+  var ignored=getIgnoredAnomalies();
+  var results=[];
+  CATS.filter(function(c){return c.type==='ind';}).forEach(function(cat){
+    var seen={};
+    Object.values(DB.results).forEach(function(res){
+      if(res.catId!==cat.id)return;
+      res.rows.forEach(function(row){
+        var cog=norm(row.cognome||'');
+        var nom=norm(row.nome||'');
+        if(!cog||!nom)return;
+        var cogWords=cog.split(/\s+/).filter(function(w){return w.length>2;});
+        var nomWords=nom.split(/\s+/).filter(Boolean);
+        var hasRepeat=cogWords.some(function(w){return nomWords.indexOf(w)>=0;});
+        if(!hasRepeat)return;
+        var fullName=((row.cognome||'')+' '+(row.nome||'')).trim();
+        var pair=['__repeat__',fullName].sort().join('||');
+        if(ignored.indexOf(pair)>=0)return;
+        if(!seen[fullName]){seen[fullName]=true;results.push({cat:cat.name,catId:cat.id,name1:fullName,name2:'__repeat__',isRepeat:true,score:1});}
+      });
+    });
+  });
+  return results;
+}
 function pfloat(s){return typeof s==='number'?s:parseFloat(String(s).replace(',','.'))||0;}
 function isASD(a){if(!DB.settings.asdHighlight||!a)return false;return a.toLowerCase().indexOf(DB.settings.asdHighlight.toLowerCase())>=0;}
 
@@ -728,7 +752,7 @@ function buildASDClassContent(cirId){
         '</tr>';
     }).join('');
     circHtml='<div class="tw"><table><thead><tr><th>POS</th><th>ASD</th><th>PUNTI CIRCUITO</th></tr></thead><tbody>'+body+'</tbody></table></div>'+
-      '<p style="font-size:11px;color:var(--tx3);margin-top:8px">1°=100, 2°=95... 10°=55, dall\' 11°=54 poi -1. Jolly x2. Solo categorie individuali.</p>';
+      '<p style="font-size:11px;color:var(--tx3);margin-top:8px">Per tappa: miglior atleta per cat. = punti posizione; altri: 10 pt (top 10), 5 pt (11°+). Jolly: totale tappa ×2. Solo categorie individuali. TI esclusa dal circuito.</p>';
   }
   
   var natHtml='';
@@ -742,7 +766,7 @@ function buildASDClassContent(cirId){
     }).join('');
     natHtml='<div style="margin-top:20px"><div style="font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:10px">&#x1F30D; Classifica Nazionale a Squadre</div>'+
       '<div class="tw"><table><thead><tr><th>POS</th><th>ASD</th><th>PUNTI NAZIONALI</th></tr></thead><tbody>'+natBody+'</tbody></table></div>'+
-      '<p style="font-size:11px;color:var(--tx3);margin-top:8px">Miglior camminatore + miglior istruttore = punteggio pieno (migliori 3 tappe). Altri: 10 pt (top10) o 5 pt (dall\' 11°).</p></div>';
+      '<p style="font-size:11px;color:var(--tx3);margin-top:8px">Somma dei 3 circuiti + Tappa Italia (scala 100/99/98…) + Finalissima. Stessa logica per tappa: miglior atleta per cat. = punti pieno; altri: 10 pt (top 10), 5 pt (11°+).</p></div>';
   }
   
   return '<div style="font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:10px">&#x1F3C6; Classifica ASD &ndash; '+CIR[cirId].name+'</div>'+circHtml+natHtml;
@@ -1273,12 +1297,17 @@ function isTappaItalia(stageId){ return stageId==='bologna-ti'; }
 // ── CLASSIFICA ASD PER CIRCUITO ──────────────────────────────
 function getASDCircuitStandings(cirId){
   var indCats=CATS.filter(function(c){return c.type==='ind';});
-  var stgs=STAGES.filter(function(s){return s.circuits.indexOf(cirId)>=0&&s.id!=='san-dona';});
+  // TI excluded from circuit team standings; Finalissima always excluded
+  var stgs=STAGES.filter(function(s){
+    return s.circuits.indexOf(cirId)>=0&&s.id!=='san-dona'&&!isTappaItalia(s.id);
+  });
   var asdMap={};
 
   for(var si=0;si<stgs.length;si++){
     var st=stgs[si];
-    var jolly=st.jollyFor.indexOf(cirId)>=0;
+    var isJolly=st.jollyFor.indexOf(cirId)>=0;
+    // Group athletes by ASD and category for this stage
+    var stageData={};
     for(var ci=0;ci<indCats.length;ci++){
       var cat=indCats[ci];
       var res=getRes(st.id,cat.id);
@@ -1287,108 +1316,85 @@ function getASDCircuitStandings(cirId){
         var row=res.rows[ri];
         var asd=row.assoc||'';
         if(!asd)continue;
-        if(cirId!=='ti'){
-          var ac=getASDCircuito(asd);
-          if(isTappaItalia(st.id)){
-            if(ac!=='tutti'&&ac!==cirId)continue;
-          } else {
-            if(ac!=='nd'&&ac!=='tutti'&&ac!==cirId)continue;
-          }
-        }
-        if(!asdMap[asd])asdMap[asd]={asd:asd,total:0,details:[]};
-        var pts=isTappaItalia(st.id)?posToPointsTI(row.pos):posToPoints(row.pos);
-        if(jolly)pts*=2;
-        asdMap[asd].total+=pts;
-        asdMap[asd].details.push({stage:st.name,cat:cat.name,pos:row.pos,pts:pts,jolly:jolly});
+        var ac=getASDCircuito(asd);
+        if(ac!=='nd'&&ac!=='tutti'&&ac!==cirId)continue;
+        if(!stageData[asd])stageData[asd]={};
+        if(!stageData[asd][cat.id])stageData[asd][cat.id]=[];
+        stageData[asd][cat.id].push(parseInt(row.pos)||0);
       }
     }
+    // Per ASD: best per category gets full points, others get 10 (top10) or 5 (11th+)
+    Object.keys(stageData).forEach(function(asd){
+      var stagePts=0;
+      indCats.forEach(function(cat){
+        var poss=stageData[asd][cat.id]||[];
+        if(!poss.length)return;
+        poss.sort(function(a,b){return a-b;});
+        stagePts+=posToPoints(poss[0]);
+        for(var k=1;k<poss.length;k++){stagePts+=(poss[k]<=10?10:5);}
+      });
+      if(isJolly)stagePts*=2;
+      if(!asdMap[asd])asdMap[asd]={asd:asd,total:0};
+      asdMap[asd].total+=stagePts;
+    });
   }
   return Object.values(asdMap).sort(function(a,b){return b.total-a.total;}).map(function(a,i){a.pos=i+1;return a;});
 }
 
 // ── CLASSIFICA ASD NAZIONALE ─────────────────────────────────
-function getASDNationalStandings(){
+// Single-stage helper: best per category gets full points, others 10/5
+function getASDStagePts(stageId,useTiScale){
   var indCats=CATS.filter(function(c){return c.type==='ind';});
-  var campCats=indCats.filter(function(c){return c.id.indexOf('camminatore')>=0;});
-  var istrCats=indCats.filter(function(c){return c.id.indexOf('istruttore')>=0;});
-  var allStgs=STAGES.filter(function(s){return s.id!=='san-dona';});
-  var asdMap={};
-
-  function collectAthleteScores(cats){
-    var data={};
-    for(var si=0;si<allStgs.length;si++){
-      var st=allStgs[si];
-      for(var ci=0;ci<cats.length;ci++){
-        var cat=cats[ci];
-        var res=getRes(st.id,cat.id);
-        if(!res)continue;
-        for(var ri=0;ri<res.rows.length;ri++){
-          var row=res.rows[ri];
-          var asd=row.assoc||'';
-          if(!asd)continue;
-          var key=norm(row.cognome||'')+' '+norm(row.nome||'');
-          if(!data[asd])data[asd]={};
-          if(!data[asd][key])data[asd][key]=[];
-          var pts=isTappaItalia(st.id)?posToPointsTI(row.pos):posToPoints(row.pos);
-          if(st.jollyFor&&st.jollyFor.length>0){pts*=2;}
-          data[asd][key].push({stageId:st.id,pos:row.pos,pts:pts});
-        }
-      }
+  var stageData={};
+  for(var ci=0;ci<indCats.length;ci++){
+    var cat=indCats[ci];
+    var res=getRes(stageId,cat.id);
+    if(!res)continue;
+    for(var ri=0;ri<res.rows.length;ri++){
+      var row=res.rows[ri];
+      var asd=row.assoc||'';
+      if(!asd)continue;
+      if(!stageData[asd])stageData[asd]={};
+      if(!stageData[asd][cat.id])stageData[asd][cat.id]=[];
+      stageData[asd][cat.id].push(parseInt(row.pos)||0);
     }
-    return data;
   }
-
-  function best3Total(scores){
-    var sorted=scores.slice().sort(function(a,b){return b.pts-a.pts;});
-    return sorted.slice(0,3).reduce(function(s,x){return s+x.pts;},0);
-  }
-
-  var campData=collectAthleteScores(campCats);
-  var istrData=collectAthleteScores(istrCats);
-
-  var allASD=Array.from(new Set(
-    Object.keys(campData).concat(Object.keys(istrData))
-  ));
-
-  allASD.forEach(function(asd){
-    var total=0;
-    if(campData[asd]){
-      var keys=Object.keys(campData[asd]);
-      if(keys.length){
-        var bestCamp=0;
-        var bestCampKey='';
-        keys.forEach(function(k){
-          var b=best3Total(campData[asd][k]);
-          if(b>bestCamp){bestCamp=b;bestCampKey=k;}
-        });
-        total+=bestCamp;
-        keys.filter(function(k){return k!==bestCampKey;}).forEach(function(k){
-          var scores=campData[asd][k];
-          var bestPos=scores.length?Math.min.apply(null,scores.map(function(s){return s.pos;})):999;
-          total+=(bestPos<=10?10:5);
-        });
-      }
-    }
-    if(istrData[asd]){
-      var keys2=Object.keys(istrData[asd]);
-      if(keys2.length){
-        var bestIstr=0;
-        var bestIstrKey='';
-        keys2.forEach(function(k){
-          var b=best3Total(istrData[asd][k]);
-          if(b>bestIstr){bestIstr=b;bestIstrKey=k;}
-        });
-        total+=bestIstr;
-        keys2.filter(function(k){return k!==bestIstrKey;}).forEach(function(k){
-          var scores=istrData[asd][k];
-          var bestPos=scores.length?Math.min.apply(null,scores.map(function(s){return s.pos;})):999;
-          total+=(bestPos<=10?10:5);
-        });
-      }
-    }
-    asdMap[asd]={asd:asd,total:total};
+  var result={};
+  Object.keys(stageData).forEach(function(asd){
+    var stagePts=0;
+    indCats.forEach(function(cat){
+      var poss=stageData[asd][cat.id]||[];
+      if(!poss.length)return;
+      poss.sort(function(a,b){return a-b;});
+      stagePts+=(useTiScale?posToPointsTI(poss[0]):posToPoints(poss[0]));
+      for(var k=1;k<poss.length;k++){stagePts+=(poss[k]<=10?10:5);}
+    });
+    result[asd]=stagePts;
   });
+  return result;
+}
 
+function getASDNationalStandings(){
+  var asdMap={};
+  // 1. Sum circuit ASD standings (each circuit excludes TI and Finalissima)
+  ['nord','cs','sic'].forEach(function(cirId){
+    getASDCircuitStandings(cirId).forEach(function(r){
+      if(!asdMap[r.asd])asdMap[r.asd]={asd:r.asd,total:0};
+      asdMap[r.asd].total+=r.total;
+    });
+  });
+  // 2. Tappa Italia (scale 100, 99, 98...; no jolly)
+  var tiPts=getASDStagePts('bologna-ti',true);
+  Object.keys(tiPts).forEach(function(asd){
+    if(!asdMap[asd])asdMap[asd]={asd:asd,total:0};
+    asdMap[asd].total+=tiPts[asd];
+  });
+  // 3. Finalissima (standard scale; no jolly)
+  var finPts=getASDStagePts('san-dona',false);
+  Object.keys(finPts).forEach(function(asd){
+    if(!asdMap[asd])asdMap[asd]={asd:asd,total:0};
+    asdMap[asd].total+=finPts[asd];
+  });
   return Object.values(asdMap).sort(function(a,b){return b.total-a.total;}).map(function(a,i){a.pos=i+1;return a;});
 }
 
@@ -1480,12 +1486,17 @@ function searchASD(btn){
 
 function renderSettings(){
   var el=document.getElementById('v-settings');
-  var anomalies=detectAllAnomalies();
+  var anomalies=detectAllAnomalies().concat(detectRepeatedNameAnomalies());
   var anomHtml='';
   if(anomalies.length){
     anomHtml='<div class="card" style="margin-bottom:16px;border-color:#fbbf24"><div class="ct" style="color:#92400e">&#x26A0;&#xFE0F; Anomalie rilevate ('+anomalies.length+')</div><p style="color:var(--tx2);font-size:12px;margin-bottom:12px">Nomi simili che potrebbero essere duplicati. Correggi manualmente caricando di nuovo la classifica o ignora i falsi positivi.</p>';
     anomalies.forEach(function(a){
-      anomHtml+='<div style="padding:10px;background:#fff7e6;border-radius:6px;margin-bottom:8px;font-size:13px"><div style="font-weight:600;color:#92400e">'+a.cat+' &mdash; '+Math.round(a.score*100)+'% simile</div><div style="margin:6px 0"><span style="color:var(--tx)">'+a.name1+'</span> &harr; <span style="color:var(--tx)">'+a.name2+'</span></div><button class="btn bg bsm" onclick="ignoreAnomalyAndRefresh(\''+a.name1.replace(/\'/g,"\\'").replace(/"/g,'&quot;')+'\',\''+a.name2.replace(/\'/g,"\\'").replace(/"/g,'&quot;')+'\')">Ignora</button></div>';
+      var desc=a.isRepeat?'Parola ripetuta nel nome':(Math.round(a.score*100)+'% simile');
+      var names=a.isRepeat
+        ?('<span style="color:var(--tx)">'+a.name1+'</span>')
+        :('<span style="color:var(--tx)">'+a.name1+'</span> &harr; <span style="color:var(--tx)">'+a.name2+'</span>');
+      var n2esc=a.isRepeat?'__repeat__':a.name2.replace(/\'/g,"\\'").replace(/"/g,'&quot;');
+      anomHtml+='<div style="padding:10px;background:#fff7e6;border-radius:6px;margin-bottom:8px;font-size:13px"><div style="font-weight:600;color:#92400e">'+a.cat+' &mdash; '+desc+'</div><div style="margin:6px 0">'+names+'</div><button class="btn bg bsm" onclick="ignoreAnomalyAndRefresh(\''+a.name1.replace(/\'/g,"\\'").replace(/"/g,'&quot;')+'\',\''+n2esc+'\')">Ignora</button></div>';
     });
     anomHtml+='</div>';
   } else {
