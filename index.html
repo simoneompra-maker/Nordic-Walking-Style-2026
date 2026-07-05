@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#0a0e17">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="manifest" href="./manifest.json">
 <title>NW Style 2026 · Classifiche</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -87,6 +88,7 @@ tbody tr.hl:hover{background:rgba(230,51,41,.12)!important}
 </style>
 </head>
 <body>
+<div id="sw-toast" style="display:none;position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#1e293b;color:#fff;padding:12px 20px;border-radius:10px;font-size:13px;z-index:9999;align-items:center;gap:12px;box-shadow:0 4px 16px rgba(0,0,0,.4)"><span>&#x1F504; Nuova versione disponibile</span><button onclick="location.reload()" style="background:#e63329;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:12px;cursor:pointer;font-weight:600">Aggiorna</button></div>
 <div id="app">
   <header id="hdr">
     <div class="logo">NW <span>STYLE</span> 2026</div>
@@ -1714,6 +1716,19 @@ Promise.all([loadAllResults(), loadASDMap()]).then(function(){
   }
   renderDash();
 });
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('./sw.js').then(function(reg){
+    reg.addEventListener('updatefound',function(){
+      var nw=reg.installing;
+      nw.addEventListener('statechange',function(){
+        if(nw.state==='installed'&&navigator.serviceWorker.controller){
+          var t=document.getElementById('sw-toast');
+          if(t)t.style.display='flex';
+        }
+      });
+    });
+  });
+}
 </script>
 </body>
 </html>

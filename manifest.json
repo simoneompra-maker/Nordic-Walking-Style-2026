@@ -1,0 +1,11 @@
+{
+  "name": "Nordic Walking Style 2026",
+  "short_name": "NW Style",
+  "description": "Classifiche Nordic Walking Style 2026",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0a0e17",
+  "theme_color": "#0a0e17",
+  "lang": "it"
+}
