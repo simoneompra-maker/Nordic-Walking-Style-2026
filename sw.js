@@ -1,4 +1,4 @@
-const CACHE = 'nws2026-v4';
+const CACHE = 'nws2026-v5';
 
 self.addEventListener('install', ev => {
   ev.waitUntil(caches.open(CACHE).then(c => c.add('./')));
