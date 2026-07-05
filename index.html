@@ -1318,24 +1318,25 @@ function getASDCircuitStandings(cirId){
         if(!asd)continue;
         var ac=getASDCircuito(asd);
         if(ac!=='nd'&&ac!=='tutti'&&ac!==cirId)continue;
-        if(!stageData[asd])stageData[asd]={};
-        if(!stageData[asd][cat.id])stageData[asd][cat.id]=[];
-        stageData[asd][cat.id].push(parseInt(row.pos)||0);
+        var canon=getASDCanonicalName(asd);
+        if(!stageData[canon])stageData[canon]={};
+        if(!stageData[canon][cat.id])stageData[canon][cat.id]=[];
+        stageData[canon][cat.id].push(parseInt(row.pos)||0);
       }
     }
     // Per ASD: best per category gets full points, others get 10 (top10) or 5 (11th+)
-    Object.keys(stageData).forEach(function(asd){
+    Object.keys(stageData).forEach(function(canon){
       var stagePts=0;
       indCats.forEach(function(cat){
-        var poss=stageData[asd][cat.id]||[];
+        var poss=stageData[canon][cat.id]||[];
         if(!poss.length)return;
         poss.sort(function(a,b){return a-b;});
         stagePts+=posToPoints(poss[0]);
         for(var k=1;k<poss.length;k++){stagePts+=(poss[k]<=10?10:5);}
       });
       if(isJolly)stagePts*=2;
-      if(!asdMap[asd])asdMap[asd]={asd:asd,total:0};
-      asdMap[asd].total+=stagePts;
+      if(!asdMap[canon])asdMap[canon]={asd:canon,total:0};
+      asdMap[canon].total+=stagePts;
     });
   }
   return Object.values(asdMap).sort(function(a,b){return b.total-a.total;}).map(function(a,i){a.pos=i+1;return a;});
@@ -1354,22 +1355,23 @@ function getASDStagePts(stageId,useTiScale){
       var row=res.rows[ri];
       var asd=row.assoc||'';
       if(!asd)continue;
-      if(!stageData[asd])stageData[asd]={};
-      if(!stageData[asd][cat.id])stageData[asd][cat.id]=[];
-      stageData[asd][cat.id].push(parseInt(row.pos)||0);
+      var canon=getASDCanonicalName(asd);
+      if(!stageData[canon])stageData[canon]={};
+      if(!stageData[canon][cat.id])stageData[canon][cat.id]=[];
+      stageData[canon][cat.id].push(parseInt(row.pos)||0);
     }
   }
   var result={};
-  Object.keys(stageData).forEach(function(asd){
+  Object.keys(stageData).forEach(function(canon){
     var stagePts=0;
     indCats.forEach(function(cat){
-      var poss=stageData[asd][cat.id]||[];
+      var poss=stageData[canon][cat.id]||[];
       if(!poss.length)return;
       poss.sort(function(a,b){return a-b;});
       stagePts+=(useTiScale?posToPointsTI(poss[0]):posToPoints(poss[0]));
       for(var k=1;k<poss.length;k++){stagePts+=(poss[k]<=10?10:5);}
     });
-    result[asd]=stagePts;
+    result[canon]=stagePts;
   });
   return result;
 }
@@ -1399,14 +1401,18 @@ function getASDNationalStandings(){
 }
 
 // ── ASD CIRCUITI ─────────────────────────────────────────────
-var ASD_MAP = {};
+var ASD_MAP = {};    // asd_name -> circuito
+var ASD_CANON = {};  // asd_name -> nome_canonico
 
 async function loadASDMap(){
   try{
     var resp=await fetch(SUPA_URL+'/rest/v1/asd_circuiti?select=*',{headers:supaHeaders()});
     var data=await resp.json();
-    ASD_MAP={};
-    if(Array.isArray(data)) data.forEach(function(r){ ASD_MAP[r.asd_name]=r.circuito; });
+    ASD_MAP={};ASD_CANON={};
+    if(Array.isArray(data)) data.forEach(function(r){
+      ASD_MAP[r.asd_name]=r.circuito;
+      ASD_CANON[r.asd_name]=r.nome_canonico||r.asd_name;
+    });
   }catch(e){console.error('loadASDMap error',e);}
 }
 
@@ -1419,6 +1425,17 @@ async function saveASDCircuito(asdName, circuito){
       body:JSON.stringify({asd_name:asdName,circuito:circuito})
     });
   }catch(e){console.error('saveASDCircuito error',e);}
+}
+
+async function saveASDCanonical(asdName, nomeCanon){
+  ASD_CANON[asdName]=nomeCanon||asdName;
+  try{
+    await fetch(SUPA_URL+'/rest/v1/asd_circuiti',{
+      method:'POST',
+      headers:Object.assign({},supaHeaders(),{'Prefer':'resolution=merge-duplicates'}),
+      body:JSON.stringify({asd_name:asdName,nome_canonico:nomeCanon||null})
+    });
+  }catch(e){console.error('saveASDCanonical error',e);}
 }
 
 function getAllASD(){
@@ -1434,6 +1451,11 @@ function getAllASD(){
 
 function getASDCircuito(asdName){
   return ASD_MAP[asdName]||'nd';
+}
+
+function getASDCanonicalName(asdName){
+  if(!asdName)return asdName;
+  return ASD_CANON[asdName]||asdName;
 }
 
 function renderASD(){
@@ -1452,8 +1474,10 @@ function renderASD(){
 
   var rows=function(list){
     return list.map(function(a){
-      return '<tr><td style="padding:8px 12px;font-size:13px">'+a+'</td>'+
+      var canonVal=getASDCanonicalName(a);if(canonVal===a)canonVal='';
+      return '<tr><td style="padding:8px 12px;font-size:13px;word-break:break-word;max-width:200px">'+a+'</td>'+
         '<td style="padding:8px 12px"><select class="asd-sel" data-asd="'+a.replace(/"/g,'&quot;')+'" style="padding:6px 10px;border-radius:6px;border:1px solid var(--brd);background:var(--s2);color:var(--tx);font-size:12px" onchange="onASDChange(this)">'+cirOpts(a)+'</select></td>'+
+        '<td style="padding:8px 12px"><input type="text" value="'+canonVal.replace(/"/g,'&quot;')+'" placeholder="Nome canonico…" data-asd="'+a.replace(/"/g,'&quot;')+'" style="padding:5px 8px;border-radius:6px;border:1px solid var(--brd);background:var(--s2);color:var(--tx);font-size:11px;width:170px" onblur="onASDCanonChange(this)" onkeydown="if(event.key===\'Enter\')this.blur()"></td>'+
         '<td style="padding:8px 12px"><button class="btn bg bsm" onclick="searchASD(this)" data-asd-search="'+a.replace(/"/g,'&quot;')+'" title="Cerca su web">🔍</button></td></tr>';
     }).join('');
   };
@@ -1462,9 +1486,9 @@ function renderASD(){
     '<p style="color:var(--tx2);font-size:13px;margin-bottom:20px">Assegna ogni ASD al circuito di appartenenza. Le classifiche filtreranno automaticamente.</p>'+
     (nd.length?'<div class="card" style="margin-bottom:16px;border-left:3px solid var(--yel)">'+
       '<div class="ct" style="color:var(--yel)">⚠️ Non assegnate ('+nd.length+')</div>'+
-      '<div class="tw"><table width="100%"><tbody>'+rows(nd)+'</tbody></table></div></div>':'<div class="al ao" style="margin-bottom:16px">✅ Tutte le ASD sono state assegnate!</div>')+
+      '<div class="tw"><table width="100%"><thead><tr><th>Nome OCR</th><th>Circuito</th><th>Nome canonico</th><th></th></tr></thead><tbody>'+rows(nd)+'</tbody></table></div></div>':'<div class="al ao" style="margin-bottom:16px">✅ Tutte le ASD sono state assegnate!</div>')+
     (assigned.length?'<div class="card"><div class="ct">✅ Assegnate ('+assigned.length+')</div>'+
-      '<div class="tw"><table width="100%"><tbody>'+rows(assigned)+'</tbody></table></div></div>':'');
+      '<div class="tw"><table width="100%"><thead><tr><th>Nome OCR</th><th>Circuito</th><th>Nome canonico</th><th></th></tr></thead><tbody>'+rows(assigned)+'</tbody></table></div></div>':'');
 }
 
 function onASDChange(sel){
@@ -1476,6 +1500,12 @@ function onASDChange(sel){
     var el=document.querySelector('#v-asd .ct');
     if(el&&el.textContent.includes('Non assegnate')) el.textContent='⚠️ Non assegnate ('+nd.length+')';
   });
+}
+
+function onASDCanonChange(input){
+  var asd=input.dataset.asd;
+  var canon=input.value.trim();
+  saveASDCanonical(asd, canon||null);
 }
 
 function searchASD(btn){
