@@ -1488,6 +1488,8 @@ function renderASD(){
     }).join('');
   };
 
+  var hasCanonicals=Object.keys(ASD_CANON).some(function(k){return ASD_CANON[k]&&ASD_CANON[k]!==k;});
+  var resetBtn=hasCanonicals?'<button class="btn bg bsm" style="color:var(--red);border-color:var(--red)" onclick="resetAllCanonicals(this)">&#x274C; Reimposta tutti i canonici</button>':'';
   var suggestHtml='';
   if(_asdGroups.length){
     var gItems=_asdGroups.map(function(g,idx){
@@ -1500,8 +1502,10 @@ function renderASD(){
     suggestHtml='<div class="card" style="margin-bottom:16px;border-color:#60a5fa">'+
       '<div class="ct" style="color:#1d4ed8">&#x1F517; Nomi simili rilevati ('+_asdGroups.length+' gruppi)</div>'+
       '<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Verifica il nome canonico e applica. Le varianti verranno unificate nelle classifiche squadre.</p>'+
-      '<button class="btn bp bsm" style="margin-bottom:14px" onclick="applyAllASDGroups(this)">&#x26A1; Applica tutti</button>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button class="btn bp bsm" onclick="applyAllASDGroups(this)">&#x26A1; Applica tutti</button>'+resetBtn+'</div>'+
       gItems+'</div>';
+  } else if(hasCanonicals){
+    suggestHtml='<div class="card" style="margin-bottom:16px;border-color:rgba(52,211,153,.3)"><div class="ct">&#x2705; Nomi canonici applicati</div><div style="margin-top:10px">'+resetBtn+'</div></div>';
   }
 
   el.innerHTML='<h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:8px">GESTIONE <span style="color:var(--grn)">ASD</span></h2>'+
@@ -1546,8 +1550,9 @@ function detectASDGroups(){
     if(!wa.length||!wb.length)return lev;
     var wbSet={};wb.forEach(function(w){wbSet[w]=true;});
     var common=wa.filter(function(w){return wbSet[w];}).length;
+    if(common<2)return lev; // almeno 2 parole significative in comune per evitare falsi positivi
     var jac=common/(wa.length+wb.length-common);
-    return jac>=0.45?Math.max(lev,jac):lev;
+    return jac>=0.5?Math.max(lev,jac):lev;
   }
   var parent={};
   all.forEach(function(a){parent[a]=a;});
@@ -1599,6 +1604,14 @@ async function applyAllASDGroups(btn){
       if(g.members[k]!==canon)await saveASDCanonical(g.members[k],canon);
     }
   }
+  renderASD();
+}
+
+async function resetAllCanonicals(btn){
+  if(!confirm('Cancellare tutti i nomi canonici? I raggruppamenti manuali andranno persi.'))return;
+  if(btn){btn.textContent='…';btn.disabled=true;}
+  var all=getAllASD();
+  for(var i=0;i<all.length;i++){await saveASDCanonical(all[i],null);}
   renderASD();
 }
 
