@@ -1443,7 +1443,9 @@ async function saveASDCanonical(asdName, nomeCanon){
 
 function getAllASD(){
   var asdSet={};
+  var indIds=CATS.filter(function(c){return c.type==='ind';}).map(function(c){return c.id;});
   Object.values(DB.results).forEach(function(res){
+    if(indIds.indexOf(res.catId)<0)return;
     res.rows.forEach(function(row){
       var a=row.assoc||'';
       if(a) asdSet[a]=true;
