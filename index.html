@@ -1403,6 +1403,7 @@ function getASDNationalStandings(){
 // ── ASD CIRCUITI ─────────────────────────────────────────────
 var ASD_MAP = {};    // asd_name -> circuito
 var ASD_CANON = {};  // asd_name -> nome_canonico
+var _asdGroups = []; // detected similarity groups
 
 async function loadASDMap(){
   try{
@@ -1463,7 +1464,8 @@ function renderASD(){
   var allASD=getAllASD();
   var nd=allASD.filter(function(a){return getASDCircuito(a)==='nd';});
   var assigned=allASD.filter(function(a){return getASDCircuito(a)!=='nd';});
-  
+  _asdGroups=detectASDGroups();
+
   var cirOpts=function(a){
     var v=getASDCircuito(a);
     return ['nd','nord','cs','sic','tutti'].map(function(c){
@@ -1482,12 +1484,29 @@ function renderASD(){
     }).join('');
   };
 
+  var suggestHtml='';
+  if(_asdGroups.length){
+    var gItems=_asdGroups.map(function(g,idx){
+      return '<div style="padding:10px;background:var(--s2);border-radius:8px;margin-bottom:8px">'+
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+
+        '<input type="text" id="asd-grp-'+idx+'" value="'+g.canonical.replace(/"/g,'&quot;')+'" style="flex:1;padding:6px 8px;border-radius:6px;border:1px solid var(--brd);background:var(--bg);color:var(--tx);font-size:13px;font-weight:600">'+
+        '<button class="btn bg bsm" onclick="applyASDGroup('+idx+',this)">Applica</button></div>'+
+        '<div style="font-size:11px;color:var(--tx3);line-height:1.6">'+g.members.join(' &bull; ')+'</div></div>';
+    }).join('');
+    suggestHtml='<div class="card" style="margin-bottom:16px;border-color:#60a5fa">'+
+      '<div class="ct" style="color:#1d4ed8">&#x1F517; Nomi simili rilevati ('+_asdGroups.length+' gruppi)</div>'+
+      '<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Verifica il nome canonico e applica. Le varianti verranno unificate nelle classifiche squadre.</p>'+
+      '<button class="btn bp bsm" style="margin-bottom:14px" onclick="applyAllASDGroups(this)">&#x26A1; Applica tutti</button>'+
+      gItems+'</div>';
+  }
+
   el.innerHTML='<h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:8px">GESTIONE <span style="color:var(--grn)">ASD</span></h2>'+
     '<p style="color:var(--tx2);font-size:13px;margin-bottom:20px">Assegna ogni ASD al circuito di appartenenza. Le classifiche filtreranno automaticamente.</p>'+
+    suggestHtml+
     (nd.length?'<div class="card" style="margin-bottom:16px;border-left:3px solid var(--yel)">'+
-      '<div class="ct" style="color:var(--yel)">⚠️ Non assegnate ('+nd.length+')</div>'+
-      '<div class="tw"><table width="100%"><thead><tr><th>Nome OCR</th><th>Circuito</th><th>Nome canonico</th><th></th></tr></thead><tbody>'+rows(nd)+'</tbody></table></div></div>':'<div class="al ao" style="margin-bottom:16px">✅ Tutte le ASD sono state assegnate!</div>')+
-    (assigned.length?'<div class="card"><div class="ct">✅ Assegnate ('+assigned.length+')</div>'+
+      '<div class="ct" style="color:var(--yel)">&#x26A0;&#xFE0F; Non assegnate ('+nd.length+')</div>'+
+      '<div class="tw"><table width="100%"><thead><tr><th>Nome OCR</th><th>Circuito</th><th>Nome canonico</th><th></th></tr></thead><tbody>'+rows(nd)+'</tbody></table></div></div>':'<div class="al ao" style="margin-bottom:16px">&#x2705; Tutte le ASD sono state assegnate!</div>')+
+    (assigned.length?'<div class="card"><div class="ct">&#x2705; Assegnate ('+assigned.length+')</div>'+
       '<div class="tw"><table width="100%"><thead><tr><th>Nome OCR</th><th>Circuito</th><th>Nome canonico</th><th></th></tr></thead><tbody>'+rows(assigned)+'</tbody></table></div></div>':'');
 }
 
@@ -1506,6 +1525,77 @@ function onASDCanonChange(input){
   var asd=input.dataset.asd;
   var canon=input.value.trim();
   saveASDCanonical(asd, canon||null);
+}
+
+function detectASDGroups(){
+  var all=getAllASD();
+  function normASD(s){
+    return s.toLowerCase().replace(/['''`]/g,'').replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
+  }
+  var STOP=['asd','aps','nw','nordic','walking','sport','club','team','del','di','da','le','la'];
+  function asdSim(a,b){
+    var na=normASD(a),nb=normASD(b);
+    var lev=similarity(na,nb);
+    if(lev>=0.70)return lev;
+    var wa=na.split(' ').filter(function(w){return w.length>=3&&STOP.indexOf(w)<0;});
+    var wb=nb.split(' ').filter(function(w){return w.length>=3&&STOP.indexOf(w)<0;});
+    if(!wa.length||!wb.length)return lev;
+    var wbSet={};wb.forEach(function(w){wbSet[w]=true;});
+    var common=wa.filter(function(w){return wbSet[w];}).length;
+    var jac=common/(wa.length+wb.length-common);
+    return jac>=0.45?Math.max(lev,jac):lev;
+  }
+  var parent={};
+  all.forEach(function(a){parent[a]=a;});
+  function find(a){if(parent[a]!==a)parent[a]=find(parent[a]);return parent[a];}
+  function unite(a,b){var ra=find(a),rb=find(b);if(ra!==rb)parent[ra]=rb;}
+  for(var i=0;i<all.length;i++){
+    for(var j=i+1;j<all.length;j++){
+      var ai=all[i],aj=all[j];
+      var ci=getASDCircuito(ai),cj=getASDCircuito(aj);
+      if(ci!=='nd'&&cj!=='nd'&&ci!==cj)continue;
+      if(asdSim(ai,aj)>=0.5)unite(ai,aj);
+    }
+  }
+  var gMap={};
+  all.forEach(function(a){var r=find(a);if(!gMap[r])gMap[r]=[];gMap[r].push(a);});
+  return Object.values(gMap).filter(function(g){return g.length>1;}).map(function(g){
+    // Prefer already-set canonical; then prefer mixed-case over ALL-CAPS; then longest
+    var existCanon=null;
+    g.forEach(function(a){var c=ASD_CANON[a];if(c&&c!==a&&!existCanon)existCanon=c;});
+    var canon=existCanon||g.reduce(function(best,a){
+      var bCaps=best===best.toUpperCase(),aCaps=a===a.toUpperCase();
+      if(bCaps&&!aCaps)return a;if(!bCaps&&aCaps)return best;
+      return a.length>best.length?a:best;
+    },g[0]);
+    return {canonical:canon,members:g.slice().sort()};
+  });
+}
+
+async function applyASDGroup(idx,btn){
+  var g=_asdGroups[idx];if(!g)return;
+  var inp=document.getElementById('asd-grp-'+idx);
+  var canon=inp?inp.value.trim():g.canonical;
+  if(!canon)return;
+  if(btn){btn.textContent='…';btn.disabled=true;}
+  for(var k=0;k<g.members.length;k++){
+    if(g.members[k]!==canon)await saveASDCanonical(g.members[k],canon);
+  }
+  renderASD();
+}
+
+async function applyAllASDGroups(btn){
+  if(btn){btn.textContent='…';btn.disabled=true;}
+  for(var i=0;i<_asdGroups.length;i++){
+    var inp=document.getElementById('asd-grp-'+i);
+    var canon=inp?inp.value.trim():_asdGroups[i].canonical;
+    if(!canon)continue;
+    var g=_asdGroups[i];
+    for(var k=0;k<g.members.length;k++){
+      if(g.members[k]!==canon)await saveASDCanonical(g.members[k],canon);
+    }
+  }
+  renderASD();
 }
 
 function searchASD(btn){
