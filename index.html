@@ -1296,6 +1296,11 @@ var POS_POINTS=[100,95,90,85,80,75,70,65,60,55];
 function posToPoints(pos){
   if(pos<=0)return 0;
   if(pos<=10)return POS_POINTS[pos-1];
+  return Math.max(1, 54-(pos-11));
+}
+function posToPointsASD(pos){
+  if(pos<=0)return 0;
+  if(pos<=10)return POS_POINTS[pos-1];
   return 5;
 }
 
@@ -1343,7 +1348,7 @@ function getASDCircuitStandings(cirId){
         var poss=stageData[canon][cat.id]||[];
         if(!poss.length)return;
         poss.sort(function(a,b){return a-b;});
-        stagePts+=posToPoints(poss[0]);
+        stagePts+=posToPointsASD(poss[0]);
         for(var k=1;k<poss.length;k++){stagePts+=(poss[k]<=10?10:5);}
       });
       if(isJolly)stagePts*=2;
@@ -1380,7 +1385,7 @@ function getASDStagePts(stageId,useTiScale){
       var poss=stageData[canon][cat.id]||[];
       if(!poss.length)return;
       poss.sort(function(a,b){return a-b;});
-      stagePts+=posToPoints(poss[0]);
+      stagePts+=posToPointsASD(poss[0]);
       for(var k=1;k<poss.length;k++){stagePts+=(poss[k]<=10?10:5);}
     });
     result[canon]=stagePts;
