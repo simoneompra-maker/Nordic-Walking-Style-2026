@@ -764,7 +764,7 @@ function buildASDClassContent(cirId){
         '</tr>';
     }).join('');
     circHtml='<div class="tw"><table><thead><tr><th>POS</th><th>ASD</th><th>PUNTI CIRCUITO</th></tr></thead><tbody>'+body+'</tbody></table></div>'+
-      '<p style="font-size:11px;color:var(--tx3);margin-top:8px">Per tappa: miglior atleta per cat. = punti posizione; altri: 10 pt (top 10), 5 pt (11°+). Jolly: totale tappa ×2. Solo categorie individuali. TI esclusa dal circuito.</p>';
+      '<p style="font-size:11px;color:var(--tx3);margin-top:8px">Per tappa: miglior atleta per cat. = punti posizione; altri: 10 pt (top 10), 5 pt (11°+). Jolly: totale tappa ×2. Solo categorie individuali. Vengono conteggiate le <strong>3 migliori tappe</strong> del circuito (Tappa Italia inclusa).</p>';
   }
   
   var natHtml='';
@@ -778,7 +778,7 @@ function buildASDClassContent(cirId){
     }).join('');
     natHtml='<div style="margin-top:20px"><div style="font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:10px">&#x1F30D; Classifica Nazionale a Squadre</div>'+
       '<div class="tw"><table><thead><tr><th>POS</th><th>ASD</th><th>PUNTI NAZIONALI</th></tr></thead><tbody>'+natBody+'</tbody></table></div>'+
-      '<p style="font-size:11px;color:var(--tx3);margin-top:8px">Somma dei 3 circuiti + Tappa Italia (scala 100/99/98…) + Finalissima. Stessa logica per tappa: miglior atleta per cat. = punti pieno; altri: 10 pt (top 10), 5 pt (11°+).</p></div>';
+      '<p style="font-size:11px;color:var(--tx3);margin-top:8px">Somma dei 3 circuiti (ciascuno con le 3 migliori tappe, Tappa Italia inclusa) + Finalissima. Per tappa: miglior atleta per cat. = punti pieno; altri: 10 pt (top 10), 5 pt (11°+).</p></div>';
   }
   
   return '<div style="font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:10px">&#x1F3C6; Classifica ASD &ndash; '+CIR[cirId].name+'</div>'+circHtml+natHtml;
@@ -1313,9 +1313,11 @@ function isTappaItalia(stageId){ return stageId==='bologna-ti'; }
 // (5 tappe totali) vengono scartate le 2 tappe con punteggio più basso per ciascuna ASD.
 function getASDCircuitStandings(cirId){
   var indCats=CATS.filter(function(c){return c.type==='ind';});
-  // TI excluded from circuit team standings; Finalissima always excluded
+  // La Tappa Italia È una tappa a tutti gli effetti di ogni circuito (circuits:['ti','nord','cs','sic']).
+  // I punti TI confluiscono nel circuito di appartenenza dell'ASD (filtro getASDCircuito più sotto).
+  // Solo la Finalissima è esclusa dai circuiti.
   var stgs=STAGES.filter(function(s){
-    return s.circuits.indexOf(cirId)>=0&&s.id!=='san-dona'&&!isTappaItalia(s.id);
+    return s.circuits.indexOf(cirId)>=0&&s.id!=='san-dona';
   });
   // asdStagePts[canon] = array dei punti ottenuti da quell'ASD in ciascuna tappa disputata
   var asdStagePts={};
@@ -1323,6 +1325,7 @@ function getASDCircuitStandings(cirId){
   for(var si=0;si<stgs.length;si++){
     var st=stgs[si];
     var isJolly=st.jollyFor.indexOf(cirId)>=0;
+    var stIsTI=isTappaItalia(st.id); // TI usa la scala 100/99/98… invece di 100/95/90…
     // Group athletes by ASD and category for this stage
     var stageData={};
     for(var ci=0;ci<indCats.length;ci++){
@@ -1348,7 +1351,7 @@ function getASDCircuitStandings(cirId){
         var poss=stageData[canon][cat.id]||[];
         if(!poss.length)return;
         poss.sort(function(a,b){return a-b;});
-        stagePts+=posToPoints(poss[0]);
+        stagePts+=(stIsTI?posToPointsTI(poss[0]):posToPoints(poss[0]));
         for(var k=1;k<poss.length;k++){stagePts+=(poss[k]<=10?10:5);}
       });
       if(isJolly)stagePts*=2;
@@ -1405,20 +1408,16 @@ function getASDStagePts(stageId,useTiScale){
 
 function getASDNationalStandings(){
   var asdMap={};
-  // 1. Sum circuit ASD standings (each circuit excludes TI and Finalissima)
+  // 1. Somma le classifiche ASD dei 3 circuiti.
+  //    NB: ogni circuito include già la Tappa Italia tra le sue tappe (best-3 applicato),
+  //    quindi la TI NON va risommata qui, altrimenti verrebbe contata due volte.
   ['nord','cs','sic'].forEach(function(cirId){
     getASDCircuitStandings(cirId).forEach(function(r){
       if(!asdMap[r.asd])asdMap[r.asd]={asd:r.asd,total:0};
       asdMap[r.asd].total+=r.total;
     });
   });
-  // 2. Tappa Italia (scale 100, 99, 98...; no jolly)
-  var tiPts=getASDStagePts('bologna-ti',true);
-  Object.keys(tiPts).forEach(function(asd){
-    if(!asdMap[asd])asdMap[asd]={asd:asd,total:0};
-    asdMap[asd].total+=tiPts[asd];
-  });
-  // 3. Finalissima (standard scale; no jolly)
+  // 2. Finalissima (standard scale; no jolly) — unica tappa esclusa dai circuiti
   var finPts=getASDStagePts('san-dona',false);
   Object.keys(finPts).forEach(function(asd){
     if(!asdMap[asd])asdMap[asd]={asd:asd,total:0};
