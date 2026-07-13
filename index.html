@@ -1298,11 +1298,6 @@ function posToPoints(pos){
   if(pos<=10)return POS_POINTS[pos-1];
   return Math.max(1, 54-(pos-11));
 }
-function posToPointsASD(pos){
-  if(pos<=0)return 0;
-  if(pos<=10)return POS_POINTS[pos-1];
-  return 5;
-}
 
 function posToPointsTI(pos){
   if(pos<=0)return 0;
@@ -1312,13 +1307,18 @@ function posToPointsTI(pos){
 function isTappaItalia(stageId){ return stageId==='bologna-ti'; }
 
 // ── CLASSIFICA ASD PER CIRCUITO ──────────────────────────────
+// FIX 6: getASDCircuitStandings tiene solo le MIGLIORI 3 TAPPE per ASD (regolamento punto 26:
+// "calcolando i migliori punteggi di 3 tappe per tutti e i 3 circuiti"), invece di sommare
+// tutte le tappe disputate. Per la Sicilia (3 tappe totali) l'effetto è nullo; per Nord/Centro-Sud
+// (5 tappe totali) vengono scartate le 2 tappe con punteggio più basso per ciascuna ASD.
 function getASDCircuitStandings(cirId){
   var indCats=CATS.filter(function(c){return c.type==='ind';});
   // TI excluded from circuit team standings; Finalissima always excluded
   var stgs=STAGES.filter(function(s){
     return s.circuits.indexOf(cirId)>=0&&s.id!=='san-dona'&&!isTappaItalia(s.id);
   });
-  var asdMap={};
+  // asdStagePts[canon] = array dei punti ottenuti da quell'ASD in ciascuna tappa disputata
+  var asdStagePts={};
 
   for(var si=0;si<stgs.length;si++){
     var st=stgs[si];
@@ -1348,14 +1348,24 @@ function getASDCircuitStandings(cirId){
         var poss=stageData[canon][cat.id]||[];
         if(!poss.length)return;
         poss.sort(function(a,b){return a-b;});
-        stagePts+=posToPointsASD(poss[0]);
+        stagePts+=posToPoints(poss[0]);
         for(var k=1;k<poss.length;k++){stagePts+=(poss[k]<=10?10:5);}
       });
       if(isJolly)stagePts*=2;
-      if(!asdMap[canon])asdMap[canon]={asd:canon,total:0};
-      asdMap[canon].total+=stagePts;
+      if(!asdStagePts[canon])asdStagePts[canon]=[];
+      asdStagePts[canon].push(stagePts);
     });
   }
+
+  // Per ogni ASD, tieni solo le migliori 3 tappe (o tutte se sono meno di 3)
+  var asdMap={};
+  Object.keys(asdStagePts).forEach(function(canon){
+    var pts=asdStagePts[canon].slice().sort(function(a,b){return b-a;});
+    var best3=pts.slice(0,3);
+    var total=best3.reduce(function(s,p){return s+p;},0);
+    asdMap[canon]={asd:canon,total:total};
+  });
+
   return Object.values(asdMap).sort(function(a,b){return b.total-a.total;}).map(function(a,i){a.pos=i+1;return a;});
 }
 
@@ -1385,7 +1395,7 @@ function getASDStagePts(stageId,useTiScale){
       var poss=stageData[canon][cat.id]||[];
       if(!poss.length)return;
       poss.sort(function(a,b){return a-b;});
-      stagePts+=posToPointsASD(poss[0]);
+      stagePts+=(useTiScale?posToPointsTI(poss[0]):posToPoints(poss[0]));
       for(var k=1;k<poss.length;k++){stagePts+=(poss[k]<=10?10:5);}
     });
     result[canon]=stagePts;
@@ -1556,18 +1566,24 @@ function detectASDGroups(){
     return s.toLowerCase().replace(/['''`]/g,'').replace(/[^a-z0-9\s]/g,' ').replace(/\s+/g,' ').trim();
   }
   var STOP=['asd','aps','nw','nordic','walking','sport','club','team','del','di','da','le','la'];
+  // FIX 7: asdSim non ripiega più sulla similarità grezza (lev) quando non ci sono
+  // abbastanza parole significative in comune. Prima, nomi brevi con lo stesso prefisso
+  // generico (es. "ASD Atletica Gorizia" / "ASD Atletica Cibeno") potevano superare la
+  // soglia di unione (0.5) solo per la somiglianza letterale, fondendo per errore ASD
+  // completamente diverse. Ora, sotto soglia 0.70 di somiglianza letterale, l'unione
+  // avviene SOLO se condividono almeno 2 parole distintive con Jaccard >=0.5; altrimenti 0.
   function asdSim(a,b){
     var na=normASD(a),nb=normASD(b);
     var lev=similarity(na,nb);
     if(lev>=0.70)return lev;
     var wa=na.split(' ').filter(function(w){return w.length>=3&&STOP.indexOf(w)<0;});
     var wb=nb.split(' ').filter(function(w){return w.length>=3&&STOP.indexOf(w)<0;});
-    if(!wa.length||!wb.length)return lev;
+    if(!wa.length||!wb.length)return 0;
     var wbSet={};wb.forEach(function(w){wbSet[w]=true;});
     var common=wa.filter(function(w){return wbSet[w];}).length;
-    if(common<2)return lev; // almeno 2 parole significative in comune per evitare falsi positivi
+    if(common<2)return 0; // almeno 2 parole significative in comune per evitare falsi positivi
     var jac=common/(wa.length+wb.length-common);
-    return jac>=0.5?Math.max(lev,jac):lev;
+    return jac>=0.5?jac:0;
   }
   var parent={};
   all.forEach(function(a){parent[a]=a;});
