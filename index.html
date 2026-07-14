@@ -1600,7 +1600,14 @@ function detectASDGroups(){
   }
   var gMap={};
   all.forEach(function(a){var r=find(a);if(!gMap[r])gMap[r]=[];gMap[r].push(a);});
-  return Object.values(gMap).filter(function(g){return g.length>1;}).map(function(g){
+  return Object.values(gMap).filter(function(g){
+    if(g.length<=1)return false;
+    // FIX 8: nascondi i gruppi GIÀ unificati — se tutti i membri puntano già allo stesso
+    // nome canonico, il problema è risolto e non ha senso continuare a segnalarlo.
+    var canons=g.map(function(a){return getASDCanonicalName(a);});
+    var allSame=canons.every(function(c){return c===canons[0];});
+    return !allSame;
+  }).map(function(g){
     // Prefer already-set canonical; then prefer mixed-case over ALL-CAPS; then longest
     var existCanon=null;
     g.forEach(function(a){var c=ASD_CANON[a];if(c&&c!==a&&!existCanon)existCanon=c;});
