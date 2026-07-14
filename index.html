@@ -1489,6 +1489,33 @@ function getASDCanonicalName(asdName){
   return ASD_CANON[asdName]||asdName;
 }
 
+// ── GRUPPI ASD IGNORATI (falsi positivi) ─────────────────────
+// Alcuni gruppi rilevati come "simili" sono in realtà ASD diverse
+// (es. "ASD Hills Nordic Walking" vs "ASD Outdoor Nordic & Walking").
+// Non potendo essere unificati, verrebbero riproposti all'infinito:
+// l'utente può marcarli come ignorati e non li rivedrà più.
+function asdGroupKey(members){
+  return members.slice().sort().join('||');
+}
+function getIgnoredASDGroups(){
+  try{return JSON.parse(localStorage.getItem('nws2026_asd_groups_ignored')||'[]');}catch(e){return [];}
+}
+function saveIgnoredASDGroups(list){
+  try{localStorage.setItem('nws2026_asd_groups_ignored',JSON.stringify(list));}catch(e){}
+}
+function ignoreASDGroup(idx){
+  var g=_asdGroups[idx];if(!g)return;
+  var key=asdGroupKey(g.members);
+  var list=getIgnoredASDGroups();
+  if(list.indexOf(key)<0){list.push(key);saveIgnoredASDGroups(list);}
+  renderASD();
+}
+function resetIgnoredASDGroups(){
+  if(!confirm('Mostrare di nuovo tutti i gruppi ignorati?'))return;
+  saveIgnoredASDGroups([]);
+  renderASD();
+}
+
 function renderASD(){
   var el=document.getElementById('v-asd');
   var allASD=getAllASD();
@@ -1516,22 +1543,25 @@ function renderASD(){
 
   var hasCanonicals=Object.keys(ASD_CANON).some(function(k){return ASD_CANON[k]&&ASD_CANON[k]!==k;});
   var resetBtn=hasCanonicals?'<button class="btn bg bsm" style="color:var(--red);border-color:var(--red)" onclick="resetAllCanonicals(this)">&#x274C; Reimposta tutti i canonici</button>':'';
+  var nIgnored=getIgnoredASDGroups().length;
+  var unignoreBtn=nIgnored?'<button class="btn bg bsm" onclick="resetIgnoredASDGroups()">&#x1F441;&#xFE0F; Mostra gruppi ignorati ('+nIgnored+')</button>':'';
   var suggestHtml='';
   if(_asdGroups.length){
     var gItems=_asdGroups.map(function(g,idx){
       return '<div style="padding:10px;background:var(--s2);border-radius:8px;margin-bottom:8px">'+
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+
         '<input type="text" id="asd-grp-'+idx+'" value="'+g.canonical.replace(/"/g,'&quot;')+'" style="flex:1;padding:6px 8px;border-radius:6px;border:1px solid var(--brd);background:var(--bg);color:var(--tx);font-size:13px;font-weight:600">'+
-        '<button class="btn bg bsm" onclick="applyASDGroup('+idx+',this)">Applica</button></div>'+
+        '<button class="btn bg bsm" onclick="applyASDGroup('+idx+',this)">Applica</button>'+
+        '<button class="btn bg bsm" style="color:var(--tx3)" title="Non sono la stessa ASD: non mostrare più questo gruppo" onclick="ignoreASDGroup('+idx+')">&#x2715; Ignora</button></div>'+
         '<div style="font-size:11px;color:var(--tx3);line-height:1.6">'+g.members.join(' &bull; ')+'</div></div>';
     }).join('');
     suggestHtml='<div class="card" style="margin-bottom:16px;border-color:#60a5fa">'+
       '<div class="ct" style="color:#1d4ed8">&#x1F517; Nomi simili rilevati ('+_asdGroups.length+' gruppi)</div>'+
-      '<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Verifica il nome canonico e applica. Le varianti verranno unificate nelle classifiche squadre.</p>'+
-      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button class="btn bp bsm" onclick="applyAllASDGroups(this)">&#x26A1; Applica tutti</button>'+resetBtn+'</div>'+
+      '<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Verifica il nome canonico e applica per unificare le varianti. Se sono <strong>ASD diverse</strong>, usa &laquo;Ignora&raquo; per non rivederle.</p>'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px"><button class="btn bp bsm" onclick="applyAllASDGroups(this)">&#x26A1; Applica tutti</button>'+resetBtn+unignoreBtn+'</div>'+
       gItems+'</div>';
-  } else if(hasCanonicals){
-    suggestHtml='<div class="card" style="margin-bottom:16px;border-color:rgba(52,211,153,.3)"><div class="ct">&#x2705; Nomi canonici applicati</div><div style="margin-top:10px">'+resetBtn+'</div></div>';
+  } else if(hasCanonicals||nIgnored){
+    suggestHtml='<div class="card" style="margin-bottom:16px;border-color:rgba(52,211,153,.3)"><div class="ct">&#x2705; Nessun gruppo da verificare</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'+resetBtn+unignoreBtn+'</div></div>';
   }
 
   el.innerHTML='<h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:8px">GESTIONE <span style="color:var(--grn)">ASD</span></h2>'+
@@ -1600,13 +1630,17 @@ function detectASDGroups(){
   }
   var gMap={};
   all.forEach(function(a){var r=find(a);if(!gMap[r])gMap[r]=[];gMap[r].push(a);});
+  var ignored=getIgnoredASDGroups();
   return Object.values(gMap).filter(function(g){
     if(g.length<=1)return false;
     // FIX 8: nascondi i gruppi GIÀ unificati — se tutti i membri puntano già allo stesso
     // nome canonico, il problema è risolto e non ha senso continuare a segnalarlo.
     var canons=g.map(function(a){return getASDCanonicalName(a);});
     var allSame=canons.every(function(c){return c===canons[0];});
-    return !allSame;
+    if(allSame)return false;
+    // FIX 9: nascondi i gruppi marcati come falsi positivi dall'utente
+    if(ignored.indexOf(asdGroupKey(g))>=0)return false;
+    return true;
   }).map(function(g){
     // Prefer already-set canonical; then prefer mixed-case over ALL-CAPS; then longest
     var existCanon=null;
