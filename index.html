@@ -1325,7 +1325,9 @@ function getASDCircuitStandings(cirId){
   for(var si=0;si<stgs.length;si++){
     var st=stgs[si];
     var isJolly=st.jollyFor.indexOf(cirId)>=0;
-    var stIsTI=isTappaItalia(st.id); // TI usa la scala 100/99/98… invece di 100/95/90…
+    // NB: nella classifica ASD a squadre TUTTE le tappe (Tappa Italia inclusa) usano la scala
+    // standard 100/95/90/85… (punto 23). La scala 100/99/98… del punto 24 vale solo per le
+    // classifiche individuali e a coppie, non per le squadre.
     // Group athletes by ASD and category for this stage
     var stageData={};
     for(var ci=0;ci<indCats.length;ci++){
@@ -1351,7 +1353,7 @@ function getASDCircuitStandings(cirId){
         var poss=stageData[canon][cat.id]||[];
         if(!poss.length)return;
         poss.sort(function(a,b){return a-b;});
-        stagePts+=(stIsTI?posToPointsTI(poss[0]):posToPoints(poss[0]));
+        stagePts+=posToPoints(poss[0]);
         for(var k=1;k<poss.length;k++){stagePts+=(poss[k]<=10?10:5);}
       });
       if(isJolly)stagePts*=2;
