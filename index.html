@@ -48,6 +48,13 @@ tbody tr:hover{background:rgba(255,255,255,.03)}
 tbody td{padding:9px 12px;color:var(--tx)}
 tbody tr.hl{background:rgba(230,51,41,.08)!important}
 tbody tr.hl:hover{background:rgba(230,51,41,.12)!important}
+/* Tabella classifica: colonne calibrate sul contenuto reale */
+table.tcomp{table-layout:fixed;min-width:920px}
+table.tcomp thead th{padding:9px 5px;letter-spacing:.4px}
+table.tcomp tbody td{padding:8px 5px}
+table.tcomp thead th:nth-child(2),table.tcomp thead th:nth-child(3),
+table.tcomp tbody td:nth-child(2),table.tcomp tbody td:nth-child(3){padding-left:11px;padding-right:11px}
+table.tcomp tbody td:nth-child(2),table.tcomp tbody td:nth-child(3){overflow:hidden;text-overflow:ellipsis}
 .pb{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:6px;font-family:var(--fh);font-weight:800;font-size:13px}
 .p1{background:rgba(251,191,36,.2);color:var(--yel)}.p2{background:rgba(160,176,204,.15);color:#a0b0c0}.p3{background:rgba(180,130,90,.15);color:#c8905a}.px{background:var(--s2);color:var(--tx3)}
 .pts{font-family:var(--fh);font-weight:700;font-size:15px}
@@ -812,7 +819,10 @@ function buildStTable(cirId,catId){
     var qBadge=qlim?'<span class="'+(i<qlim?'qy':i<qlim+5?'qm':'qn')+'">'+(i<qlim?'Q':i<qlim+5?'~':'')+'</span>':'';
     return '<tr class="'+(isASD(r.assoc)?'hl':'')+'"><td><div style="display:flex;align-items:center;gap:6px"><span class="pb p'+(i<3?i+1:'x')+'">'+(i+1)+'</span>'+qBadge+'</div></td><td style="font-weight:'+(isASD(r.assoc)?600:400)+'">'+r.display+'</td><td style="font-size:12px;color:'+(isASD(r.assoc)?'var(--red)':'var(--tx2)')+'">'+r.assoc+'</td><td style="text-align:center;color:var(--tx3)">'+r.stages.length+'</td>'+stgPts+'<td><span class="pts" style="color:'+c.color+'">'+r.total+'</span></td></tr>';
   }).join('');
-  return '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap"><span style="font-family:var(--fh);font-weight:700;font-size:18px">'+cat.name+' &ndash; '+c.name+'</span>'+(qlim?'<span style="font-size:12px;color:var(--tx3);margin-left:auto">Finalissima: top <strong>'+qlim+'</strong></span>':'')+'</div><div class="tw"><table><thead><tr><th>POS</th><th>'+(isCop?'Coppia':'Atleta')+'</th><th>ASD</th><th>Tap.</th>'+stgCols+'<th>TOTALE</th></tr></thead><tbody>'+bodyRows+'</tbody></table></div><div style="margin-top:10px;font-size:11px;color:var(--tx3)">&#x2605; = Tappa Jolly (punti &times;2) &mdash; Punteggi posizione: 1°=100, 2°=95...10°=55, dall\'11°=54 poi -1. Tappa Italia: 1°=100, 2°=99...</div>';
+  var nStg=stgs.length;
+  var stgW=nStg?(38/nStg).toFixed(2):6;
+  var colGroup='<colgroup><col style="width:6%"><col style="width:22%"><col style="width:22%"><col style="width:5%">'+stgs.map(function(){return '<col style="width:'+stgW+'%">';}).join('')+'<col style="width:7%"></colgroup>';
+  return '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap"><span style="font-family:var(--fh);font-weight:700;font-size:18px">'+cat.name+' &ndash; '+c.name+'</span>'+(qlim?'<span style="font-size:12px;color:var(--tx3);margin-left:auto">Finalissima: top <strong>'+qlim+'</strong></span>':'')+'</div><div class="tw"><table class="tcomp">'+colGroup+'<thead><tr><th>POS</th><th>'+(isCop?'Coppia':'Atleta')+'</th><th>ASD</th><th>Tap.</th>'+stgCols+'<th>TOTALE</th></tr></thead><tbody>'+bodyRows+'</tbody></table></div><div style="margin-top:10px;font-size:11px;color:var(--tx3)">&#x2605; = Tappa Jolly (punti &times;2) &mdash; Punteggi posizione: 1°=100, 2°=95...10°=55, dall\'11°=54 poi -1. Tappa Italia: 1°=100, 2°=99...</div>';
 }
 
 // FIX 2: buildStageDetail esclude bologna-ti dal dettaglio dei circuiti specifici
@@ -1761,16 +1771,96 @@ function expFilename(ext){
   return 'NWS2026_'+cirName+'_'+catLabel+'_'+date+'.'+ext;
 }
 
-function expImg(){
+/* ---- EXPORT IMMAGINE / PDF -------------------------------------------
+   Il rendering NON usa più l'elemento a schermo (che su mobile viene
+   schiacciato e produce testo illeggibile): il contenuto viene clonato in
+   un contenitore fuori schermo di larghezza fissa, così l'export è identico
+   da telefono e da PC. Oltre le 25 righe la classifica viene divisa in più
+   parti, ognuna con intestazione, titolo e nota ripetuti.               */
+var EXP_WIDTH=1400;      // larghezza di rendering in px
+var EXP_SCALE=3;         // moltiplicatore di risoluzione
+var EXP_ROWS_PER_PAGE=22;// righe per parte
+
+function expChunks(){
   var el=document.getElementById('exp-wrap');
-  if(!el||typeof html2canvas==='undefined')return;
-  html2canvas(el,{backgroundColor:'#ffffff',scale:2}).then(function(canvas){var a=document.createElement('a');a.href=canvas.toDataURL('image/png');a.download=expFilename('png');a.click();});
+  if(!el)return null;
+  var tbl=el.querySelector('table');
+  if(!tbl)return [null];
+  var n=tbl.querySelectorAll('tbody tr').length;
+  if(n<=25)return [null];
+  var out=[];
+  for(var i=0;i<n;i+=EXP_ROWS_PER_PAGE)out.push([i,Math.min(i+EXP_ROWS_PER_PAGE,n)]);
+  return out;
+}
+
+function expRender(range,part,total){
+  return new Promise(function(resolve,reject){
+    var src=document.getElementById('exp-wrap');
+    if(!src){reject(new Error('exp-wrap assente'));return;}
+    var host=document.createElement('div');
+    host.style.cssText='position:fixed;left:-20000px;top:0;width:'+EXP_WIDTH+'px;background:#fff;padding:24px;box-sizing:border-box;z-index:-1';
+    var clone=src.cloneNode(true);
+    clone.style.width='100%';
+    var tw=clone.querySelector('.tw');
+    if(tw){tw.style.overflow='visible';tw.style.overflowX='visible';}
+    var tb=clone.querySelector('table');
+    if(tb)tb.style.minWidth='0';
+    if(range){
+      var trs=Array.prototype.slice.call(clone.querySelectorAll('tbody tr'));
+      trs.forEach(function(tr,i){if(i<range[0]||i>=range[1])tr.parentNode.removeChild(tr);});
+      var ttl=clone.querySelector('span');
+      if(ttl)ttl.textContent=ttl.textContent+'  ·  parte '+part+'/'+total+'  ('+(range[0]+1)+'\u2013'+range[1]+')';
+    }
+    host.appendChild(clone);
+    document.body.appendChild(host);
+    html2canvas(host,{backgroundColor:'#ffffff',scale:EXP_SCALE,width:EXP_WIDTH,windowWidth:EXP_WIDTH}).then(function(canvas){
+      if(host.parentNode)host.parentNode.removeChild(host);
+      resolve(canvas);
+    }).catch(function(e){
+      if(host.parentNode)host.parentNode.removeChild(host);
+      reject(e);
+    });
+  });
+}
+
+function expImg(){
+  if(typeof html2canvas==='undefined')return;
+  var chunks=expChunks();
+  if(!chunks)return;
+  var base=expFilename('png').replace(/\.png$/,'');
+  var i=0;
+  function step(){
+    if(i>=chunks.length)return;
+    expRender(chunks[i],i+1,chunks.length).then(function(canvas){
+      var a=document.createElement('a');
+      a.href=canvas.toDataURL('image/png');
+      a.download=(chunks.length>1)?base+'_parte'+(i+1)+'di'+chunks.length+'.png':base+'.png';
+      a.click();
+      i++;
+      setTimeout(step,700);
+    }).catch(function(e){console.error('Export immagine:',e);alert('Errore durante l\'export immagine.');});
+  }
+  step();
 }
 
 function expPDF(){
-  var el=document.getElementById('exp-wrap');
-  if(!el||typeof html2canvas==='undefined'||typeof jspdf==='undefined')return;
-  html2canvas(el,{backgroundColor:'#ffffff',scale:2}).then(function(canvas){var pdfLib=jspdf;var pdf=new pdfLib.jsPDF({orientation:'landscape',unit:'mm',format:'a4'});var w=pdf.internal.pageSize.getWidth();pdf.addImage(canvas.toDataURL('image/png'),'PNG',0,0,w,canvas.height*w/canvas.width);pdf.save(expFilename('pdf'));});
+  if(typeof html2canvas==='undefined'||typeof jspdf==='undefined')return;
+  var chunks=expChunks();
+  if(!chunks)return;
+  var pdfLib=jspdf;
+  var pdf=new pdfLib.jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  var w=pdf.internal.pageSize.getWidth();
+  var i=0;
+  function step(){
+    if(i>=chunks.length){pdf.save(expFilename('pdf'));return;}
+    expRender(chunks[i],i+1,chunks.length).then(function(canvas){
+      if(i>0)pdf.addPage();
+      pdf.addImage(canvas.toDataURL('image/png'),'PNG',0,0,w,canvas.height*w/canvas.width);
+      i++;
+      step();
+    }).catch(function(e){console.error('Export PDF:',e);alert('Errore durante l\'export PDF.');});
+  }
+  step();
 }
 
 function expFullDB(){
