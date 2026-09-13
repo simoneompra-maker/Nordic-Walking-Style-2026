@@ -79,6 +79,12 @@ table.tcomp tbody td:nth-child(2),table.tcomp tbody td:nth-child(3){overflow:hid
 .qn{background:var(--s2);color:var(--tx3);border:1px solid var(--brd);border-radius:6px;padding:2px 8px;font-size:11px}
 .ec{width:100%;background:var(--s2);border:1px solid transparent;border-radius:4px;color:var(--tx);font-family:var(--fb);font-size:12px;padding:4px 6px;outline:none}
 .ec:focus{border-color:var(--red)}
+.ec.err{border-color:var(--red);background:rgba(230,51,41,.14);font-weight:600}
+.ec.err:focus{background:var(--s2)}
+.ec.cfl{border-color:#f59e0b;background:rgba(251,191,36,.16)}
+.alt{display:inline-block;margin-left:4px;padding:1px 5px;border-radius:4px;background:#fbbf24;color:#7c2d12;font-size:11px;font-weight:700;cursor:pointer;vertical-align:middle}
+.alt:hover{background:#f59e0b;color:#fff}
+.okr{color:#10b981;font-size:11px;margin-left:3px}
 .div{height:1px;background:var(--brd);margin:20px 0}
 .tg{display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap}
 .tb{padding:6px 14px;border-radius:20px;border:1px solid var(--brd);background:transparent;color:var(--tx3);cursor:pointer;font-size:12px;font-family:var(--fh);font-weight:600;letter-spacing:.5px;transition:all .2s}
@@ -563,7 +569,7 @@ function renderUpload(){
     return '<option value="'+s.id+'"'+(upState.stage===s.id?' selected':'')+'>['+s.label+'] '+s.name+' &mdash; '+fmtDs(s.date)+'</option>';
   }).join('');
   var catOpts=CATS.map(function(c){return '<option value="'+c.id+'"'+(upState.cat===c.id?' selected':'')+'>'+c.name+'</option>';}).join('');
-  el.innerHTML='<div style="max-width:700px;margin:0 auto"><h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:20px">CARICA <span style="color:var(--ti)">RISULTATI TAPPA</span></h2><div class="al ai">&#x1F916; OCR via Gemini &mdash; puoi caricare pi&#xF9; immagini per la stessa categoria (es. classifica su pi&#xF9; pagine).</div><div class="card" style="margin-bottom:16px"><div class="ct">1. Seleziona tappa e categoria</div><div class="g2"><div class="fg"><label>Tappa</label><select id="sel-stage" onchange="upState.stage=this.value;chkExist()"><option value="">-- seleziona --</option>'+stOpts+'</select></div><div class="fg"><label>Categoria</label><select id="sel-cat" onchange="upState.cat=this.value;chkExist()"><option value="">-- seleziona --</option>'+catOpts+'</select></div></div><div id="ex-warn"></div></div><div class="card"><div class="ct">2. Carica immagini classifica</div><div class="uz" id="uz" onclick="document.getElementById(\'fi\').click()" ondragover="event.preventDefault();this.classList.add(\'dv\')" ondragleave="this.classList.remove(\'dv\')" ondrop="handleDropMulti(event)"><input type="file" id="fi" accept="image/*" multiple onchange="handleFiles(this.files)"><div style="font-size:40px;margin-bottom:12px">&#x1F4F8;</div><p style="color:var(--tx2)">Trascina una o pi&#xF9; immagini JPG oppure <strong style="color:var(--red)">clicca per selezionare</strong></p><p style="font-size:12px;color:var(--tx3);margin-top:6px">Seleziona pi&#xF9; file contemporaneamente se la classifica &#xE8; su pi&#xF9; pagine</p></div><div id="up-preview" style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"></div><div id="ocr-status" style="margin-top:16px"></div></div></div>';
+  el.innerHTML='<div style="max-width:700px;margin:0 auto"><h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:20px">CARICA <span style="color:var(--ti)">RISULTATI TAPPA</span></h2><div class="al ai">&#x1F916; OCR via Gemini con <strong>doppia lettura</strong> &mdash; puoi caricare pi&#xF9; immagini per la stessa categoria (es. classifica su pi&#xF9; pagine).</div><div class="card" style="margin-bottom:16px"><div class="ct">1. Seleziona tappa e categoria</div><div class="g2"><div class="fg"><label>Tappa</label><select id="sel-stage" onchange="upState.stage=this.value;chkExist()"><option value="">-- seleziona --</option>'+stOpts+'</select></div><div class="fg"><label>Categoria</label><select id="sel-cat" onchange="upState.cat=this.value;chkExist()"><option value="">-- seleziona --</option>'+catOpts+'</select></div></div><div id="ex-warn"></div></div><div class="card"><div class="ct">2. Carica immagini classifica</div><div class="uz" id="uz" onclick="document.getElementById(\'fi\').click()" ondragover="event.preventDefault();this.classList.add(\'dv\')" ondragleave="this.classList.remove(\'dv\')" ondrop="handleDropMulti(event)"><input type="file" id="fi" accept="image/*" multiple onchange="handleFiles(this.files)"><div style="font-size:40px;margin-bottom:12px">&#x1F4F8;</div><p style="color:var(--tx2)">Trascina una o pi&#xF9; immagini JPG oppure <strong style="color:var(--red)">clicca per selezionare</strong></p><p style="font-size:12px;color:var(--tx3);margin-top:6px">Seleziona pi&#xF9; file contemporaneamente se la classifica &#xE8; su pi&#xF9; pagine</p></div><div id="up-preview" style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap"></div><div id="ocr-status" style="margin-top:16px"></div></div></div>';
   chkExist();
 }
 
@@ -603,7 +609,7 @@ async function runOCRMulti(files, stageId, catId){
   var status=document.getElementById('ocr-status');
   var cat=CATS.find(function(c){return c.id===catId;});
   var isCop=cat.type==='cop';
-  var allRows=[];
+  var allRows=[], allRows2=[], gotB=false;
   
   status.innerHTML='<div class="sl"><div class="spin"></div><p style="margin-top:12px;color:var(--tx2)">OCR in corso per '+files.length+' immagine'+(files.length>1?'i':'')+'...</p><p style="font-size:12px;color:var(--tx3);margin-top:4px" id="ocr-page-status">Pagina 1 di '+files.length+'</p></div>';
   
@@ -613,25 +619,39 @@ async function runOCRMulti(files, stageId, catId){
     
     var b64=await fileToBase64(files[i]);
     try{
-      var rows=await ocrRequest(b64, isCop);
-      rows.forEach(function(r){
-        var exists=allRows.find(function(x){return x.pos===r.pos;});
+      var res=await ocrRequest(b64, isCop, files[i].type);
+      res.rows.forEach(function(r){
+        var exists=allRows.find(function(x){return String(x.pos)===String(r.pos);});
         if(!exists) allRows.push(r);
       });
+      if(res.rows2){
+        gotB=true;
+        res.rows2.forEach(function(r){
+          var exists=allRows2.find(function(x){return String(x.pos)===String(r.pos);});
+          if(!exists) allRows2.push(r);
+        });
+      }
     }catch(e){
       console.error('OCR page '+(i+1)+' error:',e);
     }
   }
   
   allRows.sort(function(a,b){return (a.pos||0)-(b.pos||0);});
+  allRows2.sort(function(a,b){return (a.pos||0)-(b.pos||0);});
   
   if(!allRows.length){
     status.innerHTML='<div class="al ae">&#x274C; Nessuna riga trovata in nessuna immagine</div>';
     return;
   }
   
-  status.innerHTML='<div class="al ao">&#x2705; '+allRows.length+' righe estratte da '+files.length+' immagine'+(files.length>1?'i':'')+'. <strong>Controlla</strong> prima di confermare.</div>';
-  showModal(allRows, stageId, catId);
+  var merged;
+  if(gotB){ merged=alignReadings(allRows,allRows2,isCop); }
+  else { resetCmp(); merged=allRows; }
+  var modo = !gotB ? ' <strong>(lettura singola)</strong>'
+           : _bDropped ? ' <strong>(seconda lettura scartata: troppo diversa)</strong>'
+           : ' con doppia lettura';
+  status.innerHTML='<div class="al ao">&#x2705; '+merged.length+' righe estratte da '+files.length+' immagine'+(files.length>1?'i':'')+modo+'. <strong>Controlla</strong> prima di confermare.</div>';
+  showModal(merged, stageId, catId);
 }
 
 function fileToBase64(file){
@@ -643,15 +663,16 @@ function fileToBase64(file){
   });
 }
 
-async function ocrRequest(b64, isCop){
+async function ocrRequest(b64, isCop, mime){
   var resp=await fetch('https://oykewinjysrgnhdpkabs.supabase.co/functions/v1/gemini-ocr',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({image:b64,isCoppia:isCop})
+    body:JSON.stringify({image:b64,isCoppia:isCop,mime:mime||'image/jpeg'})
   });
   var data=await resp.json();
   if(data.error) throw new Error(data.error);
-  return data.rows||[];
+  if(data.errB) console.warn('Lettura B non disponibile:', data.errB);
+  return {rows:data.rows||[], rows2:data.rows2||null};
 }
 
 var ASD_KW=['ASD','NW','NORDIC','WALKING','SPORT','CAMMINO','SORRISI','AQUILE','OMNIA','ETNA','KINESIS','EVOLUZIONE','TEAM','TRIESTE','ATLETICA','MONTELLO','PIAVE','BASILICATA','MARCHE','RAGUSA','SICILIA','GORIZIA','POMEZIA','MOGLIANO','RUNNERS','FRIENDS','BENESSERE','EQUIPE','ROMACAMMINA'];
@@ -697,17 +718,166 @@ function parseLines(lines,isCop){
 
 var _rows=[],_stg='',_cat='';
 
+/* ===== VALIDAZIONE OCR =====
+   Controlli deterministici sulle righe prima del salvataggio.
+   Regola cardine: la parte intera di "pts" deve coincidere con "tot". */
+function vInt(v){var s=String(v==null?'':v).trim();return /^\d+$/.test(s)?parseInt(s,10):null;}
+function vPts(v){var s=String(v==null?'':v).trim().replace(/\s/g,'').replace(',','.');return /^\d+(\.\d+)?$/.test(s)?parseFloat(s):null;}
+function fmtN(n){return String(n).replace('.',',');}
+function esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function chkRow(r){var t=vInt(r.tot),p=vPts(r.pts);return t!==null&&p!==null&&Math.floor(p)===t;}
+
+function validateRows(rows,isCop){
+  var errs={};
+  function add(i,c,msg){var k=i+':'+c;if(!errs[k])errs[k]=[];errs[k].push(msg);}
+  var prevPts=null;
+  rows.forEach(function(r,i){
+    var pos=vInt(r.pos), tot=vInt(r.tot), pts=vPts(r.pts);
+    if(pos===null)add(i,'pos','Posizione non numerica');
+    if(tot===null)add(i,'tot','Tot. Giudici non numerico');
+    if(pts===null)add(i,'pts','Punti non numerici');
+    if(tot!==null&&pts!==null&&Math.floor(pts)!==tot){
+      add(i,'tot','Non coincide con la parte intera dei Punti ('+Math.floor(pts)+')');
+      add(i,'pts','Parte intera '+Math.floor(pts)+' diversa dal Tot. Giudici '+tot);
+    }
+    if(pos!==null&&pos!==i+1)add(i,'pos','Attesa posizione '+(i+1)+', trovata '+pos+' - riga saltata?');
+    if(pts!==null){
+      if(prevPts!==null&&pts>prevPts)add(i,'pts','Punti superiori alla riga precedente ('+fmtN(prevPts)+')');
+      prevPts=pts;
+    }
+    if(isCop){
+      if(!String(r.p1||'').trim())add(i,'p1','Nome mancante');
+      if(!String(r.p2||'').trim())add(i,'p2','Nome mancante');
+    }else{
+      if(!String(r.cognome||'').trim())add(i,'cognome','Cognome mancante');
+      if(!String(r.nome||'').trim())add(i,'nome','Nome mancante');
+    }
+    if(!String(r.assoc||'').trim())add(i,'assoc','Associazione mancante');
+  });
+  var seen={};
+  rows.forEach(function(r,i){
+    var n=(isCop?pairDisplay(r.p1,r.p2):((r.cognome||'')+' '+(r.nome||'')).trim()).toLowerCase();
+    if(!n)return;
+    if(seen[n]!==undefined)add(i,isCop?'p1':'cognome','Duplicato della riga '+(seen[n]+1));
+    else seen[n]=i;
+  });
+  var keys=Object.keys(errs), rr={};
+  keys.forEach(function(k){rr[k.split(':')[0]]=true;});
+  return {errs:errs,count:keys.length,rows:Object.keys(rr).length};
+}
+
+/* ===== DOPPIA LETTURA =====
+   _conf["i:col"] = {a, b, hint}   hint = 'A' | 'B' | null
+   hint indica quale lettura il controllo Punti/Totale ritiene corretta.
+   E' SOLO un suggerimento: il valore viene preselezionato ma la cella
+   resta segnalata e conteggiata, la verifica finale resta all'utente. */
+var _conf={};
+var _only={};
+var _bDropped=false;
+
+function sameVal(x,y,numeric){
+  var sx=String(x==null?'':x).trim(), sy=String(y==null?'':y).trim();
+  if(numeric){
+    var nx=parseFloat(sx.replace(',','.')), ny=parseFloat(sy.replace(',','.'));
+    if(!isNaN(nx)&&!isNaN(ny))return nx===ny;
+  }
+  return sx.toLowerCase().replace(/\s+/g,' ')===sy.toLowerCase().replace(/\s+/g,' ');
+}
+
+function resetCmp(){_conf={};_only={};_bDropped=false;}
+
+function alignReadings(A,B,isCop){
+  resetCmp();
+  A=A||[];
+  if(!B||!B.length)return A.slice();
+
+  /* CANCELLO DI SICUREZZA
+     Se B differisce troppo dalla A e' probabilmente una lettura sballata:
+     usarla introdurrebbe righe fantasma invece di trovare errori.
+     Meglio rinunciare al confronto che peggiorare il dato. */
+  if(Math.abs(A.length-B.length) > Math.max(3, Math.round(A.length*0.25))){
+    _bDropped=true;
+    return A.slice();
+  }
+
+  var cols=isCop?['pos','p1','p2','assoc','tot','pts']:['pos','cognome','nome','assoc','tot','pts'];
+  var mapA={},mapB={},poss={};
+  A.forEach(function(r){var p=vInt(r.pos);if(p!==null&&mapA[p]===undefined){mapA[p]=r;poss[p]=1;}});
+  B.forEach(function(r){var p=vInt(r.pos);if(p!==null&&mapB[p]===undefined){mapB[p]=r;poss[p]=1;}});
+
+  var ordered=Object.keys(poss).map(Number).sort(function(x,y){return x-y;});
+  var out=[];
+
+  ordered.forEach(function(p){
+    var a=mapA[p], b=mapB[p], i=out.length;
+    if(a&&!b){out.push(JSON.parse(JSON.stringify(a)));_only[i]='A';return;}
+    if(b&&!a){out.push(JSON.parse(JSON.stringify(b)));_only[i]='B';return;}
+
+    var m=JSON.parse(JSON.stringify(a));
+    var dTot=!sameVal(a.tot,b.tot,true), dPts=!sameVal(a.pts,b.pts,true);
+
+    if(dTot||dPts){
+      var okA=chkRow(a), okB=chkRow(b);
+      var hint = (okA&&!okB) ? 'A' : ((okB&&!okA) ? 'B' : null);
+      if(hint==='B'){ m.tot=b.tot; m.pts=b.pts; }
+      if(dTot)_conf[i+':tot']={a:a.tot,b:b.tot,hint:hint};
+      if(dPts)_conf[i+':pts']={a:a.pts,b:b.pts,hint:hint};
+    }
+    cols.forEach(function(c){
+      if(c==='tot'||c==='pts')return;
+      if(!sameVal(a[c],b[c],false))_conf[i+':'+c]={a:a[c],b:b[c],hint:null};
+    });
+    out.push(m);
+  });
+  return out;
+}
+
+function useAlt(i,c){
+  var cf=_conf[i+':'+c]; if(!cf)return;
+  var cur=String(_rows[i][c]==null?'':_rows[i][c]);
+  _rows[i][c]=sameVal(cur,cf.a,false)?cf.b:cf.a;
+  renderRev();
+}
+
+function cmpCounts(){
+  var keys=Object.keys(_conf), hinted=0;
+  keys.forEach(function(k){if(_conf[k].hint)hinted++;});
+  return {conf:keys.length, hinted:hinted, only:Object.keys(_only).length};
+}
+
+function renderRev(){
+  var cat=CATS.find(function(c){return c.id===_cat;});
+  var isCop=cat.type==='cop';
+  var val=validateRows(_rows,isCop);
+  var cc=cmpCounts();
+  document.getElementById('mbody').innerHTML=buildRevTable(_rows,isCop,val);
+  /* TUTTE le discrepanze entrano nel conteggio, anche quelle con suggerimento */
+  var pend=val.count+cc.conf+cc.only;
+  document.getElementById('mfoot').innerHTML=
+    '<button class="btn bs2" onclick="closeModal()">Annulla</button>'+
+    (pend>0
+      ? '<button class="btn bp" style="background:var(--red)" onclick="confirmSave()">&#x26A0;&#xFE0F; Salva comunque ('+pend+' da verificare)</button>'
+      : '<button class="btn bp" onclick="confirmSave()">&#x2705; Conferma e Salva</button>');
+}
+
+function updCell(inp){
+  var i=+inp.dataset.row,c=inp.dataset.col;
+  if(i>=0&&i<_rows.length)_rows[i][c]=inp.value;
+  renderRev();
+}
+
+
 function showModal(rows,stageId,catId){
   _rows=JSON.parse(JSON.stringify(rows));_stg=stageId;_cat=catId;
   var stage=STAGES.find(function(s){return s.id===stageId;});
   var cat=CATS.find(function(c){return c.id===catId;});
   document.getElementById('mt').textContent='Revisione: '+stage.name+' \u2013 '+cat.name;
-  document.getElementById('mbody').innerHTML=buildRevTable(_rows,cat.type==='cop');
-  document.getElementById('mfoot').innerHTML='<button class="btn bs2" onclick="closeModal()">Annulla</button><button class="btn bp" onclick="confirmSave()">&#x2705; Conferma e Salva</button>';
+  renderRev();
   document.getElementById('mo').classList.add('open');
 }
 
-function buildRevTable(rows,isCop){
+function buildRevTable(rows,isCop,val){
+  val=val||validateRows(rows,isCop);
   var cols=isCop?['pos','p1','p2','assoc','tot','pts']:['pos','cognome','nome','assoc','tot','pts'];
   var hdrs=isCop?['POS','Partecipante 1','Partecipante 2','Associazione','Tot. Giudici','Punti']:['POS','Cognome','Nome','Associazione','Tot. Giudici','Punti'];
   var anomalies=rows.map(function(r){
@@ -716,30 +886,58 @@ function buildRevTable(rows,isCop){
     return findSimilarName(name, _cat);
   });
   var anomCount=anomalies.filter(function(a){return a;}).length;
+  var cc=cmpCounts();
   var html='<p style="color:var(--tx2);font-size:12px;margin-bottom:12px">Clicca su qualsiasi cella per modificarla prima di salvare.</p>';
+  if(_bDropped){
+    html+='<div class="al aw" style="margin-bottom:12px">&#x26A0;&#xFE0F; <strong>Seconda lettura scartata</strong>: il numero di righe era troppo diverso dalla prima. Nessun confronto disponibile, resta attivo il solo controllo aritmetico.</div>';
+  }
+  if(val.count>0){
+    html+='<div class="al ae" style="margin-bottom:12px">&#x1F6D1; <strong>'+val.count+' controllo'+(val.count>1?'i':'')+' non superat'+(val.count>1?'i':'o')+'</strong> su '+val.rows+' riga'+(val.rows>1?'he':'')+'. Celle in rosso: passa il mouse per il motivo.</div>';
+  }
+  if(cc.conf>0||cc.only>0){
+    html+='<div class="al aw" style="margin-bottom:12px">&#x1F50D; <strong>Le due letture differiscono</strong> su '+cc.conf+' cell'+(cc.conf===1?'a':'e')+
+      (cc.only>0?' e su '+cc.only+' riga'+(cc.only>1?'he':'')+' presente in una sola lettura':'')+'. '+
+      (cc.hinted>0?'Per '+cc.hinted+' il controllo Punti/Totale indica quale sia corretta e l\'ha gi&#xE0; preselezionata (&#x2714;) &mdash; <strong>verificale comunque</strong>. ':'')+
+      'Clicca il valore giallo accanto alla cella per usare l\'altra lettura.</div>';
+  }
   if(anomCount>0){
     html+='<div class="al" style="background:#fff7e6;border:1px solid #fbbf24;color:#92400e;margin-bottom:12px">&#x26A0;&#xFE0F; <strong>'+anomCount+' nome'+(anomCount>1?'i':'')+' simile'+(anomCount>1?'i':'')+'</strong> a voci gi&#xE0; presenti. Verifica per evitare duplicati.</div>';
   }
   html+='<div class="tw"><table><thead><tr>'+hdrs.map(function(h){return '<th>'+h+'</th>';}).join('')+'<th></th></tr></thead><tbody>';
   rows.forEach(function(r,i){
     var anom=anomalies[i];
-    var rowStyle=anom?' style="background:#fff7e6"':'';
+    var rowStyle=_only[i]?' style="background:#fde68a"':(anom?' style="background:#fff7e6"':'');
     html+='<tr'+rowStyle+'>'+cols.map(function(c,j){
       var warn='';
       if(anom&&((isCop&&(c==='p1'||c==='p2'))||(!isCop&&(c==='cognome'||c==='nome')))){
         if((isCop&&c==='p1')||(!isCop&&c==='cognome')){
-          warn=' <span title="Simile a: '+anom.similar+' ('+Math.round(anom.score*100)+'%)" style="color:#f59e0b;cursor:help">&#x26A0;&#xFE0F;</span>';
+          warn=' <span title="Simile a: '+esc(anom.similar)+' ('+Math.round(anom.score*100)+'%)" style="color:#f59e0b;cursor:help">&#x26A0;&#xFE0F;</span>';
         }
       }
-      return '<td><input class="ec" style="'+(j===0||j===4?'width:50px':j===5?'width:110px':'')+'" data-row="'+i+'" data-col="'+c+'" value="'+(r[c]||'')+'" onchange="_rows['+i+'][\''+c+'\']=this.value">'+warn+'</td>';
+      var k=i+':'+c;
+      var ce=val.errs[k], cf=_conf[k];
+      var cls='ec'+(ce?' err':'')+(cf?' cfl':'');
+      var tip='', extra='';
+      if(ce){ tip=ce.join(' - '); }
+      else if(cf){
+        tip='Lettura A: '+cf.a+'   |   Lettura B: '+cf.b+
+            (cf.hint?('   >>> il controllo Punti/Totale indica la lettura '+cf.hint+', gia preselezionata - verifica')
+                    :'   >>> il controllo non sa quale sia corretta');
+      }
+      if(cf){
+        var other=sameVal(r[c],cf.a,false)?cf.b:cf.a;
+        extra=' <span class="alt" onclick="useAlt('+i+',\''+c+'\')" title="Usa l&apos;altra lettura">'+esc(other)+'</span>';
+        if(cf.hint)extra+='<span class="okr" title="Valore preselezionato dal controllo Punti/Totale">&#x2714;</span>';
+      }
+      return '<td><input class="'+cls+'"'+(tip?' title="'+esc(tip)+'"':'')+' style="'+(j===0||j===4?'width:50px':j===5?'width:110px':'')+'" data-row="'+i+'" data-col="'+c+'" value="'+esc(r[c])+'" onchange="updCell(this)">'+warn+extra+'</td>';
     }).join('')+'<td><span class="rd" onclick="delRow('+i+')">&#x1F5D1;</span></td></tr>';
   });
   html+='</tbody></table></div><button class="btn bg bsm" style="margin-top:12px" onclick="addRow()">+ Aggiungi riga</button>';
   return html;
 }
 
-function delRow(i){_rows.splice(i,1);var cat=CATS.find(function(c){return c.id===_cat;});document.getElementById('mbody').innerHTML=buildRevTable(_rows,cat.type==='cop');}
-function addRow(){var cat=CATS.find(function(c){return c.id===_cat;});var isCop=cat.type==='cop';_rows.push(isCop?{pos:_rows.length+1,p1:'',p2:'',assoc:'',tot:0,pts:'0'}:{pos:_rows.length+1,cognome:'',nome:'',assoc:'',tot:0,pts:'0'});document.getElementById('mbody').innerHTML=buildRevTable(_rows,isCop);}
+function delRow(i){_rows.splice(i,1);resetCmp();renderRev();}
+function addRow(){var cat=CATS.find(function(c){return c.id===_cat;});var isCop=cat.type==='cop';_rows.push(isCop?{pos:_rows.length+1,p1:'',p2:'',assoc:'',tot:0,pts:'0'}:{pos:_rows.length+1,cognome:'',nome:'',assoc:'',tot:0,pts:'0'});resetCmp();renderRev();}
 
 async function confirmSave(){
   document.querySelectorAll('#mbody input.ec').forEach(function(inp){var i=+inp.dataset.row,c=inp.dataset.col;if(i>=0&&i<_rows.length)_rows[i][c]=inp.value;});
@@ -856,6 +1054,7 @@ function editBtn(sid,cid){
 function editStageResult(stageId, catId){
   var res=getRes(stageId, catId);
   if(!res||!res.rows){alert('Nessun dato trovato per questa tappa.');return;}
+  resetCmp();
   showModal(JSON.parse(JSON.stringify(res.rows)), stageId, catId);
 }
 
@@ -1722,7 +1921,7 @@ function renderSettings(){
   } else {
     anomHtml='<div class="al ao" style="margin-bottom:16px">&#x2705; Nessuna anomalia rilevata</div>';
   }
-  el.innerHTML='<div style="max-width:600px"><h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:20px">&#x2699;&#xFE0F; <span style="color:var(--sic)">IMPOSTAZIONI</span></h2><div class="card" style="margin-bottom:16px;border-color:rgba(52,211,153,.3)"><div class="ct">&#x1F916; Motore OCR</div><p style="color:var(--tx2);font-size:13px">OCR tramite <strong>Gemini AI</strong> via Supabase Edge Function &mdash; nessuna API key da configurare nell\'app.</p></div><div class="card" style="margin-bottom:16px"><div class="ct">&#x1F3C3; ASD da evidenziare</div><div class="fg"><label>Nome ASD (ricerca parziale)</label><input type="text" id="set-asd" value="'+(DB.settings.asdHighlight||'')+'" placeholder="es. Sile Walking"></div></div><button class="btn bp" onclick="saveSettings()">&#x1F4BE; Salva impostazioni</button><div class="div"></div>'+anomHtml+'<div class="card" style="border-color:rgba(230,51,41,.3)"><div class="ct" style="color:var(--red2)">&#x26A0;&#xFE0F; Gestione dati</div><p style="color:var(--tx2);font-size:13px;margin-bottom:16px">Database: <strong>'+Object.keys(DB.results).length+' classifiche</strong> salvate.</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn bs2" onclick="expFullDB()">&#x1F4CA; Export completo DB</button><button class="btn bg" style="color:var(--red);border-color:var(--red)" onclick="confirmReset()">&#x1F5D1;&#xFE0F; Cancella tutti i dati</button></div></div></div>';
+  el.innerHTML='<div style="max-width:600px"><h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:20px">&#x2699;&#xFE0F; <span style="color:var(--sic)">IMPOSTAZIONI</span></h2><div class="card" style="margin-bottom:16px;border-color:rgba(52,211,153,.3)"><div class="ct">&#x1F916; Motore OCR</div><p style="color:var(--tx2);font-size:13px">OCR tramite <strong>Gemini AI</strong> via Supabase Edge Function, con <strong>doppia lettura</strong> su due modelli e controllo aritmetico Punti/Totale &mdash; nessuna API key da configurare nell\'app.</p></div><div class="card" style="margin-bottom:16px"><div class="ct">&#x1F3C3; ASD da evidenziare</div><div class="fg"><label>Nome ASD (ricerca parziale)</label><input type="text" id="set-asd" value="'+(DB.settings.asdHighlight||'')+'" placeholder="es. Sile Walking"></div></div><button class="btn bp" onclick="saveSettings()">&#x1F4BE; Salva impostazioni</button><div class="div"></div>'+anomHtml+'<div class="card" style="border-color:rgba(230,51,41,.3)"><div class="ct" style="color:var(--red2)">&#x26A0;&#xFE0F; Gestione dati</div><p style="color:var(--tx2);font-size:13px;margin-bottom:16px">Database: <strong>'+Object.keys(DB.results).length+' classifiche</strong> salvate.</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn bs2" onclick="expFullDB()">&#x1F4CA; Export completo DB</button><button class="btn bg" style="color:var(--red);border-color:var(--red)" onclick="confirmReset()">&#x1F5D1;&#xFE0F; Cancella tutti i dati</button></div></div></div>';
 }
 
 function saveSettings(){
