@@ -1151,12 +1151,12 @@ function buildASDClassContent(cirId){
         '<td class="pts" style="color:var(--cs)">'+r.total+'</td>'+
         '</tr>';
     }).join('');
-    natHtml='<div style="margin-top:20px"><div style="font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:10px">&#x1F30D; Classifica Nazionale a Squadre</div>'+
+    natHtml='<div class="expblk" data-exp="Nazionale" style="margin-top:20px"><div style="font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:10px">&#x1F30D; Classifica Nazionale a Squadre</div>'+
       '<div class="tw"><table><thead><tr><th>POS</th><th>ASD</th><th>PUNTI NAZIONALI</th></tr></thead><tbody>'+natBody+'</tbody></table></div>'+
       '<p style="font-size:11px;color:var(--tx3);margin-top:8px">Somma dei 3 circuiti (ciascuno con le 3 migliori tappe, Tappa Italia inclusa) + Finalissima. Per tappa: miglior atleta per cat. = punti pieno; altri: 10 pt (top 10), 5 pt (11°+).</p></div>';
   }
   
-  return '<div style="font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:10px">&#x1F3C6; Classifica ASD &ndash; '+CIR[cirId].name+'</div>'+circHtml+natHtml;
+  return '<div class="expblk" data-exp="Circuito"><div style="font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:10px">&#x1F3C6; Classifica ASD &ndash; '+CIR[cirId].name+'</div>'+circHtml+'</div>'+natHtml;
 }
 
 function renderClass(){
@@ -1167,9 +1167,9 @@ function renderClass(){
   catBtns+='<button class="tb'+(clState.showASD?' active':'')+'" style="'+(clState.showASD?'border-color:var(--red);color:var(--red)':'')+'" onclick="clState.showASD=true;renderClass()">&#x1F3C6; Classifica ASD</button>';
   var mainContent='';
   if(clState.showASD){
-    mainContent='<div class="card" id="exp-wrap">'+buildASDClassContent(cir)+'</div>';
+    mainContent=expBar()+'<div class="card" id="exp-wrap">'+buildASDClassContent(cir)+'</div>';
   } else {
-    mainContent='<div class="eb"><button class="btn bg bsm" onclick="expCSV()">&#x1F4E5; CSV</button><button class="btn bg bsm" onclick="expXLS()">&#x1F4CA; Excel</button><button class="btn bg bsm" onclick="expImg()">&#x1F5BC;&#xFE0F; Immagine</button><button class="btn bg bsm" onclick="expPDF()">&#x1F4C4; PDF</button><span style="margin-left:auto;font-size:12px;color:var(--tx3)"><span style="background:var(--red);width:10px;height:10px;display:inline-block;border-radius:2px;vertical-align:middle;margin-right:4px"></span>'+(DB.settings.asdHighlight||'')+'</span></div><div class="card" id="exp-wrap">'+buildStTable(cir,cat)+'</div><div style="margin-top:20px">'+buildStageDetail(cir,cat)+'</div>';
+    mainContent=expBar()+'<div class="card" id="exp-wrap">'+buildStTable(cir,cat)+'</div><div style="margin-top:20px">'+buildStageDetail(cir,cat)+'</div>';
   }
   el.innerHTML='<h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:16px">CLASSIFICHE <span style="color:var(--red)">CIRCUITO</span></h2><div class="tg">'+cirBtns+'</div><div class="tg">'+catBtns+'</div>'+mainContent;
 }
@@ -1239,6 +1239,7 @@ function renderFin(){
   el.innerHTML=
     '<h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:16px">TRACKER <span style="color:var(--yel)">FINALISSIMA</span></h2>'+
     '<div class="al ai" style="margin-bottom:20px">&#x2139;&#xFE0F; Nord/C-Sud: Top 10 per categoria (Camminatrici F: top 15). Sicilia: Top 5 (Camminatrici F: top 10).</div>'+
+    '<div class="eb"><button class="btn bg bsm" onclick="expDossierFinalissima()" title="Tutte le categorie e tutti i circuiti in un unico file Excel, un foglio per categoria">&#x1F4DA; Dossier Finalissima (Excel)</button></div>'+
     '<div class="tg">'+cirBtns+'</div>'+
     '<div class="tg">'+catBtns+'</div>'+
     '<div class="card" style="margin-bottom:20px">'+buildFinTable(cir,cat)+'</div>'+
@@ -2126,6 +2127,22 @@ function confirmReset(){if(confirm('Cancellare tutti i dati? Operazione non reve
 
 function expCSV(){
   var cir=clState.circuit,cat=clState.cat;
+  if(clState.showASD){
+    var cRows0=getASDCircuitStandings(cir);
+    var nat=getASDNationalStandings();
+    if(!cRows0.length&&!nat.length){alert('Nessun dato ASD da esportare.');return;}
+    var L=['CLASSIFICA ASD - '+CIR[cir].name,['POS','ASD','PUNTI CIRCUITO'].join(';')];
+    cRows0.forEach(function(r,i){L.push([i+1,r.asd,r.total].join(';'));});
+    if(nat.length){
+      L.push('');
+      L.push('CLASSIFICA NAZIONALE A SQUADRE');
+      L.push(['POS','ASD','PUNTI NAZIONALI'].join(';'));
+      nat.forEach(function(r,i){L.push([i+1,r.asd,r.total].join(';'));});
+    }
+    var bl=new Blob([L.join('\n')],{type:'text/csv;charset=utf-8;'});
+    var an=document.createElement('a');an.href=URL.createObjectURL(bl);an.download=expFilename('csv');an.click();
+    return;
+  }
   var rows=getStandings(cir,cat);
   var lines=[['POS','Atleta/Coppia','ASD','Tappe','Totale'].join(';')];
   rows.forEach(function(r){lines.push([r.pos,r.display,r.assoc,r.stages.length,r.total].join(';'));});
@@ -2135,6 +2152,25 @@ function expCSV(){
 
 function expXLS(){
   var cir=clState.circuit,cat=clState.cat;
+  if(clState.showASD){
+    if(typeof XLSX==='undefined'){alert('Libreria Excel non disponibile.');return;}
+    var wbA=XLSX.utils.book_new();
+    var cRows=getASDCircuitStandings(cir);
+    if(cRows.length){
+      var d1=[['POS','ASD','PUNTI CIRCUITO']];
+      cRows.forEach(function(r,i){d1.push([i+1,r.asd,r.total]);});
+      XLSX.utils.book_append_sheet(wbA,XLSX.utils.aoa_to_sheet(d1),shName('ASD '+CIR[cir].name));
+    }
+    var nRows=getASDNationalStandings();
+    if(nRows.length){
+      var d2=[['POS','ASD','PUNTI NAZIONALI']];
+      nRows.forEach(function(r,i){d2.push([i+1,r.asd,r.total]);});
+      XLSX.utils.book_append_sheet(wbA,XLSX.utils.aoa_to_sheet(d2),'ASD Nazionale');
+    }
+    if(!wbA.SheetNames.length){alert('Nessun dato da esportare.');return;}
+    XLSX.writeFile(wbA,expFilename('xlsx'));
+    return;
+  }
   var rows=getStandings(cir,cat);
   var catObj=CATS.find(function(c){return c.id===cat;});
   var stgs=STAGES.filter(function(s){return s.circuits.indexOf(cir)>=0&&s.id!=='san-dona';});
@@ -2166,19 +2202,44 @@ var EXP_WIDTH=1400;      // larghezza di rendering in px
 var EXP_SCALE=3;         // moltiplicatore di risoluzione
 var EXP_ROWS_PER_PAGE=22;// righe per parte
 
+/* Divide il contenuto da esportare in "parti".
+   Se dentro #exp-wrap ci sono blocchi .expblk (vista Classifica ASD: una tabella
+   per il circuito e una nazionale) ogni blocco viene esportato per conto suo, cosi'
+   le righe di una tabella non finiscono mai mescolate con quelle dell'altra.
+   Senza .expblk il comportamento e' identico a prima. */
+function splitRows(n,extra){
+  var out=[];
+  if(n<=25){out.push(Object.assign({part:1,parts:1},extra||{}));return out;}
+  var tot=Math.ceil(n/EXP_ROWS_PER_PAGE),p=0;
+  for(var i=0;i<n;i+=EXP_ROWS_PER_PAGE){
+    p++;
+    out.push(Object.assign({a:i,b:Math.min(i+EXP_ROWS_PER_PAGE,n),part:p,parts:tot},extra||{}));
+  }
+  return out;
+}
+
 function expChunks(){
   var el=document.getElementById('exp-wrap');
   if(!el)return null;
+  var blks=el.querySelectorAll('.expblk');
+  if(blks.length){
+    var out=[];
+    for(var b=0;b<blks.length;b++){
+      var tb=blks[b].querySelector('table');
+      var nb=tb?tb.querySelectorAll('tbody tr').length:0;
+      if(!nb)continue;
+      out=out.concat(splitRows(nb,{blk:b,lab:blks[b].getAttribute('data-exp')||('blocco'+(b+1))}));
+    }
+    return out.length?out:null;
+  }
   var tbl=el.querySelector('table');
   if(!tbl)return [null];
   var n=tbl.querySelectorAll('tbody tr').length;
   if(n<=25)return [null];
-  var out=[];
-  for(var i=0;i<n;i+=EXP_ROWS_PER_PAGE)out.push([i,Math.min(i+EXP_ROWS_PER_PAGE,n)]);
-  return out;
+  return splitRows(n);
 }
 
-function expRender(range,part,total){
+function expRender(ck,part,total){
   return new Promise(function(resolve,reject){
     var src=document.getElementById('exp-wrap');
     if(!src){reject(new Error('exp-wrap assente'));return;}
@@ -2186,15 +2247,27 @@ function expRender(range,part,total){
     host.style.cssText='position:fixed;left:-20000px;top:0;width:'+EXP_WIDTH+'px;background:#fff;padding:24px;box-sizing:border-box;z-index:-1';
     var clone=src.cloneNode(true);
     clone.style.width='100%';
-    var tw=clone.querySelector('.tw');
-    if(tw){tw.style.overflow='visible';tw.style.overflowX='visible';}
-    var tb=clone.querySelector('table');
-    if(tb)tb.style.minWidth='0';
-    if(range){
-      var trs=Array.prototype.slice.call(clone.querySelectorAll('tbody tr'));
-      trs.forEach(function(tr,i){if(i<range[0]||i>=range[1])tr.parentNode.removeChild(tr);});
-      var ttl=clone.querySelector('span');
-      if(ttl)ttl.textContent=ttl.textContent+'  ·  parte '+part+'/'+total+'  ('+(range[0]+1)+'\u2013'+range[1]+')';
+    /* tiene solo il blocco richiesto, se il contenuto e' diviso in blocchi */
+    if(ck&&ck.blk!=null){
+      var bs=Array.prototype.slice.call(clone.querySelectorAll('.expblk'));
+      bs.forEach(function(d,ix){if(ix!==ck.blk&&d.parentNode)d.parentNode.removeChild(d);});
+    }
+    Array.prototype.slice.call(clone.querySelectorAll('.tw')).forEach(function(w){
+      w.style.overflow='visible';w.style.overflowX='visible';
+    });
+    Array.prototype.slice.call(clone.querySelectorAll('table')).forEach(function(t){
+      t.style.minWidth='0';
+    });
+    if(ck&&ck.a!=null){
+      var tb0=clone.querySelector('table');
+      if(tb0){
+        var trs=Array.prototype.slice.call(tb0.querySelectorAll('tbody tr'));
+        trs.forEach(function(tr,i){if(i<ck.a||i>=ck.b)tr.parentNode.removeChild(tr);});
+      }
+      var pN=ck.part||part,pT=ck.parts||total;
+      var blkEl=clone.querySelector('.expblk');
+      var ttl=blkEl?blkEl.querySelector('div'):clone.querySelector('span');
+      if(ttl)ttl.textContent=ttl.textContent+'  ·  parte '+pN+'/'+pT+'  ('+(ck.a+1)+'\u2013'+ck.b+')';
     }
     host.appendChild(clone);
     document.body.appendChild(host);
@@ -2209,17 +2282,21 @@ function expRender(range,part,total){
 }
 
 function expImg(){
-  if(typeof html2canvas==='undefined')return;
+  if(typeof html2canvas==='undefined'){alert('Libreria immagine non disponibile.');return;}
   var chunks=expChunks();
-  if(!chunks)return;
+  if(!chunks||!chunks.length){alert('Niente da esportare: la classifica e\' vuota.');return;}
   var base=expFilename('png').replace(/\.png$/,'');
   var i=0;
   function step(){
     if(i>=chunks.length)return;
     expRender(chunks[i],i+1,chunks.length).then(function(canvas){
+      var ck=chunks[i]||{};
+      var suf=(ck.lab?'_'+ck.lab:'');
+      if(ck.parts>1)suf+='_parte'+ck.part+'di'+ck.parts;
+      else if(!ck.lab&&chunks.length>1)suf='_parte'+(i+1)+'di'+chunks.length;
       var a=document.createElement('a');
       a.href=canvas.toDataURL('image/png');
-      a.download=(chunks.length>1)?base+'_parte'+(i+1)+'di'+chunks.length+'.png':base+'.png';
+      a.download=base+suf+'.png';
       a.click();
       i++;
       setTimeout(step,700);
@@ -2229,9 +2306,9 @@ function expImg(){
 }
 
 function expPDF(){
-  if(typeof html2canvas==='undefined'||typeof jspdf==='undefined')return;
+  if(typeof html2canvas==='undefined'||typeof jspdf==='undefined'){alert('Libreria PDF non disponibile.');return;}
   var chunks=expChunks();
-  if(!chunks)return;
+  if(!chunks||!chunks.length){alert('Niente da esportare: la classifica e\' vuota.');return;}
   var pdfLib=jspdf;
   var pdf=new pdfLib.jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
   var w=pdf.internal.pageSize.getWidth();
@@ -2246,6 +2323,103 @@ function expPDF(){
     }).catch(function(e){console.error('Export PDF:',e);alert('Errore durante l\'export PDF.');});
   }
   step();
+}
+
+/* Nome foglio Excel valido: max 31 caratteri, senza \ / ? * [ ] : */
+function shName(s){
+  return String(s==null?'':s).replace(/[\\\/\?\*\[\]:]/g,'-').substring(0,31);
+}
+
+/* Barra dei pulsanti di export, identica nelle classifiche individuali e in quella ASD */
+function expBar(){
+  return '<div class="eb">'+
+    '<button class="btn bg bsm" onclick="expCSV()">&#x1F4E5; CSV</button>'+
+    '<button class="btn bg bsm" onclick="expXLS()">&#x1F4CA; Excel</button>'+
+    '<button class="btn bg bsm" onclick="expImg()">&#x1F5BC;&#xFE0F; Immagine</button>'+
+    '<button class="btn bg bsm" onclick="expPDF()">&#x1F4C4; PDF</button>'+
+    '<button class="btn bg bsm" onclick="expDossierCircuito()" title="Tutte le categorie del circuito in un unico file Excel, un foglio per classifica">&#x1F4DA; Dossier circuito</button>'+
+    '<span style="margin-left:auto;font-size:12px;color:var(--tx3)"><span style="background:var(--red);width:10px;height:10px;display:inline-block;border-radius:2px;vertical-align:middle;margin-right:4px"></span>'+(DB.settings.asdHighlight||'')+'</span>'+
+    '</div>';
+}
+
+/* Una classifica di categoria in forma di matrice per Excel: intestazione + righe,
+   con una colonna per ogni tappa del circuito (J = tappa Jolly). */
+function catSheetData(cirId,catId){
+  var rows=getStandings(cirId,catId);
+  if(!rows.length)return null;
+  var cat=CATS.find(function(c){return c.id===catId;});
+  if(!cat)return null;
+  var stgs=STAGES.filter(function(s){return s.circuits.indexOf(cirId)>=0&&s.id!=='san-dona';});
+  var head=['POS',(cat.type==='cop'?'Coppia':'Atleta'),'ASD','Tappe']
+    .concat(stgs.map(function(s){return s.name+(s.jollyFor.indexOf(cirId)>=0?' (J)':'');}))
+    .concat(['TOTALE']);
+  var data=[head];
+  rows.forEach(function(r,i){
+    var sp=stgs.map(function(s){
+      var f=null;
+      for(var k=0;k<r.stages.length;k++){if(r.stages[k].stageId===s.id){f=r.stages[k];break;}}
+      return f?f.ptsUsed:'';
+    });
+    data.push([i+1,r.display,r.assoc,r.stages.length].concat(sp).concat([r.total]));
+  });
+  return data;
+}
+
+/* DOSSIER CIRCUITO — un unico .xlsx con un foglio per ogni classifica del circuito
+   selezionato: le 7 categorie, la classifica ASD di circuito e quella nazionale.
+   Le categorie senza dati non generano un foglio vuoto: vengono saltate. */
+function expDossierCircuito(){
+  if(typeof XLSX==='undefined'){alert('Libreria Excel non disponibile.');return;}
+  var cir=clState.circuit;
+  var wb=XLSX.utils.book_new();
+  CATS.forEach(function(c){
+    var d=catSheetData(cir,c.id);
+    if(!d)return;
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(d),shName(c.name));
+  });
+  var asd=getASDCircuitStandings(cir);
+  if(asd.length){
+    var a1=[['POS','ASD','PUNTI CIRCUITO']];
+    asd.forEach(function(r,i){a1.push([i+1,r.asd,r.total]);});
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(a1),shName('ASD '+CIR[cir].name));
+  }
+  var nat=getASDNationalStandings();
+  if(nat.length){
+    var a2=[['POS','ASD','PUNTI NAZIONALI']];
+    nat.forEach(function(r,i){a2.push([i+1,r.asd,r.total]);});
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(a2),'ASD Nazionale');
+  }
+  if(!wb.SheetNames.length){alert('Nessun dato da esportare per '+CIR[cir].name+'.');return;}
+  var cn=CIR[cir].name.replace(/\s/g,'-').replace(/[^\w-]/g,'');
+  XLSX.writeFile(wb,'NWS2026_Dossier_'+cn+'_'+new Date().toISOString().split('T')[0]+'.xlsx');
+}
+
+/* DOSSIER FINALISSIMA — un unico .xlsx con un foglio per categoria; dentro ogni foglio
+   i tre circuiti uno sotto l'altro, ciascuno con la propria soglia di accesso e lo
+   stato di qualificazione riga per riga. */
+function expDossierFinalissima(){
+  if(typeof XLSX==='undefined'){alert('Libreria Excel non disponibile.');return;}
+  var wb=XLSX.utils.book_new();
+  var cirs=['nord','cs','sic'];
+  CATS.forEach(function(cat){
+    var data=[];
+    cirs.forEach(function(cid){
+      var rows=getStandings(cid,cat.id);
+      if(!rows.length)return;
+      var qlim=QLIM[cid]?(QLIM[cid][cat.id]||QLIM[cid].def):10;
+      if(data.length)data.push([]);
+      data.push([CIR[cid].name+'  \u2014  accesso: primi '+qlim]);
+      data.push(['POS',(cat.type==='cop'?'Coppia':'Atleta'),'ASD','Tappe','Totale','Finalissima']);
+      rows.forEach(function(r,i){
+        data.push([i+1,r.display,r.assoc,r.stages.length,r.total,
+          (i<qlim?'QUALIFICATO':(i<qlim+5?'IN ZONA':''))]);
+      });
+    });
+    if(!data.length)return;
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(data),shName(cat.name));
+  });
+  if(!wb.SheetNames.length){alert('Nessun dato da esportare.');return;}
+  XLSX.writeFile(wb,'NWS2026_Finalissima_'+new Date().toISOString().split('T')[0]+'.xlsx');
 }
 
 function expFullDB(){
