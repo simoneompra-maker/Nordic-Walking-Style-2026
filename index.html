@@ -1139,7 +1139,7 @@ function buildASDClassContent(cirId){
         '</tr>';
     }).join('');
     circHtml='<div class="tw"><table><thead><tr><th>POS</th><th>ASD</th><th>PUNTI CIRCUITO</th></tr></thead><tbody>'+body+'</tbody></table></div>'+
-      '<p style="font-size:11px;color:var(--tx3);margin-top:8px">Per tappa: miglior atleta per cat. = punti posizione; altri: 10 pt (top 10), 5 pt (11°+). Jolly: totale tappa ×2. Solo categorie individuali. Vengono conteggiate le <strong>3 migliori tappe</strong> del circuito (Tappa Italia inclusa).</p>';
+      '<p style="font-size:11px;color:var(--tx3);margin-top:8px">Per tappa: miglior atleta per cat. = punti posizione; altri: 10 pt (top 10), 5 pt (11°+). Jolly: totale tappa ×2. Solo categorie individuali. Si sommano <strong>tutte le tappe</strong> del circuito (Tappa Italia inclusa).</p>';
   }
   
   var natHtml='';
@@ -1153,7 +1153,7 @@ function buildASDClassContent(cirId){
     }).join('');
     natHtml='<div class="expblk" data-exp="Nazionale" style="margin-top:20px"><div style="font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:10px">&#x1F30D; Classifica Nazionale a Squadre</div>'+
       '<div class="tw"><table><thead><tr><th>POS</th><th>ASD</th><th>PUNTI NAZIONALI</th></tr></thead><tbody>'+natBody+'</tbody></table></div>'+
-      '<p style="font-size:11px;color:var(--tx3);margin-top:8px">Somma dei 3 circuiti (ciascuno con le 3 migliori tappe, Tappa Italia inclusa) + Finalissima. Per tappa: miglior atleta per cat. = punti pieno; altri: 10 pt (top 10), 5 pt (11°+).</p></div>';
+      '<p style="font-size:11px;color:var(--tx3);margin-top:8px">Per ogni ASD: <strong>3 migliori tappe</strong> del proprio circuito + Tappa Italia + Finalissima. Per tappa: miglior atleta per cat. = punti pieno; altri: 10 pt (top 10), 5 pt (11°+).</p></div>';
   }
   
   return '<div class="expblk" data-exp="Circuito"><div style="font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:10px">&#x1F3C6; Classifica ASD &ndash; '+CIR[cirId].name+'</div>'+circHtml+'</div>'+natHtml;
@@ -1687,10 +1687,11 @@ function posToPointsTI(pos){
 function isTappaItalia(stageId){ return stageId==='bologna-ti'; }
 
 // ── CLASSIFICA ASD PER CIRCUITO ──────────────────────────────
-// FIX 6: getASDCircuitStandings tiene solo le MIGLIORI 3 TAPPE per ASD (regolamento punto 26:
-// "calcolando i migliori punteggi di 3 tappe per tutti e i 3 circuiti"), invece di sommare
-// tutte le tappe disputate. Per la Sicilia (3 tappe totali) l'effetto è nullo; per Nord/Centro-Sud
-// (5 tappe totali) vengono scartate le 2 tappe con punteggio più basso per ciascuna ASD.
+// FIX 7 (regola confermata dagli organizzatori, set. 2026):
+// - Classifica ASD di CIRCUITO: si sommano TUTTE le tappe del circuito (Tappa Italia inclusa,
+//   Jolly x2) — regolamento punto 25.
+// - Classifica NAZIONALE: 3 migliori tappe del circuito + Tappa Italia + Finalissima (punto 26).
+//   Per questo ogni riga restituisce anche il dettaglio per tappa (r.stages).
 function getASDCircuitStandings(cirId){
   var indCats=CATS.filter(function(c){return c.type==='ind';});
   // La Tappa Italia È una tappa a tutti gli effetti di ogni circuito (circuits:['ti','nord','cs','sic']).
@@ -1739,17 +1740,16 @@ function getASDCircuitStandings(cirId){
       });
       if(isJolly)stagePts*=2;
       if(!asdStagePts[canon])asdStagePts[canon]=[];
-      asdStagePts[canon].push(stagePts);
+      asdStagePts[canon].push({stageId:st.id,pts:stagePts,isTI:isTappaItalia(st.id)});
     });
   }
 
-  // Per ogni ASD, tieni solo le migliori 3 tappe (o tutte se sono meno di 3)
+  // Classifica di circuito: somma di TUTTE le tappe disputate
   var asdMap={};
   Object.keys(asdStagePts).forEach(function(canon){
-    var pts=asdStagePts[canon].slice().sort(function(a,b){return b-a;});
-    var best3=pts.slice(0,3);
-    var total=best3.reduce(function(s,p){return s+p;},0);
-    asdMap[canon]={asd:canon,total:total};
+    var list=asdStagePts[canon];
+    var total=list.reduce(function(s,x){return s+x.pts;},0);
+    asdMap[canon]={asd:canon,total:total,stages:list};
   });
 
   return Object.values(asdMap).sort(function(a,b){return b.total-a.total;}).map(function(a,i){a.pos=i+1;return a;});
@@ -1792,13 +1792,18 @@ function getASDStagePts(stageId,useTiScale){
 
 function getASDNationalStandings(){
   var asdMap={};
-  // 1. Somma le classifiche ASD dei 3 circuiti.
-  //    NB: ogni circuito include già la Tappa Italia tra le sue tappe (best-3 applicato),
-  //    quindi la TI NON va risommata qui, altrimenti verrebbe contata due volte.
+  // 1. Per ogni circuito: 3 migliori tappe del circuito (Tappa Italia esclusa dalla scelta)
+  //    + punti Tappa Italia sommati sempre. La TI arriva dal dettaglio del circuito,
+  //    quindi e' contata una sola volta e nel circuito dell'ASD.
   ['nord','cs','sic'].forEach(function(cirId){
     getASDCircuitStandings(cirId).forEach(function(r){
+      var circ=r.stages.filter(function(x){return !x.isTI;})
+        .map(function(x){return x.pts;}).sort(function(a,b){return b-a;});
+      var best3=circ.slice(0,3).reduce(function(s,p){return s+p;},0);
+      var ti=r.stages.filter(function(x){return x.isTI;})
+        .reduce(function(s,x){return s+x.pts;},0);
       if(!asdMap[r.asd])asdMap[r.asd]={asd:r.asd,total:0};
-      asdMap[r.asd].total+=r.total;
+      asdMap[r.asd].total+=best3+ti;
     });
   });
   // 2. Finalissima (standard scale; no jolly) — unica tappa esclusa dai circuiti
