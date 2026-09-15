@@ -242,7 +242,7 @@ function getStandings(cirId,catId){
         if(asdCir2!=='nd'&&asdCir2!=='tutti'&&asdCir2!==cirId) return;
         var k=cat.type==='cop'
           ?pairKey(row2.p1,row2.p2)
-          :norm(row2.cognome||'')+' '+norm(row2.nome||'');
+          :indKey(row2.cognome,row2.nome);
         circuitKeys[k]=true;
       });
     });
@@ -262,7 +262,7 @@ function getStandings(cirId,catId){
           // ASD 'nd' (vuota) senza tappe normali → escludi (circuito non determinabile)
           var rowKey=cat.type==='cop'
             ?pairKey(row.p1,row.p2)
-            :norm(row.cognome||'')+' '+norm(row.nome||'');
+            :indKey(row.cognome,row.nome);
           if(!circuitKeys[rowKey]){
             // Nessuna tappa normale → serve ASD esplicita del circuito
             if(asdCir!=='tutti'&&asdCir!==cirId) continue;
@@ -274,8 +274,8 @@ function getStandings(cirId,catId){
       }
       var key=cat.type==='cop'
         ?pairKey(row.p1,row.p2)
-        :norm(row.cognome||'')+' '+norm(row.nome||'');
-      if(!map[key])map[key]={key:key,display:cat.type==='cop'?pairDisplay(row.p1,row.p2):(row.cognome||'')+' '+(row.nome||''),assoc:row.assoc||'',stages:[],total:0};
+        :indKey(row.cognome,row.nome);
+      if(!map[key])map[key]={key:key,display:cat.type==='cop'?pairDisplay(row.p1,row.p2):canonPerson(((row.cognome||'')+' '+(row.nome||'')).trim()),assoc:row.assoc||'',stages:[],total:0};
       var pts=isTappaItalia(st.id)?posToPointsTI(row.pos):posToPoints(row.pos);
       var used=jolly?pts*2:pts;
       map[key].stages.push({stageId:st.id,stageName:st.name,pts:pts,ptsUsed:used,isJolly:jolly});
@@ -288,16 +288,115 @@ function getStandings(cirId,catId){
 }
 
 function norm(s){return (s||'').trim().toLowerCase();}
-function normPerson(s){
+
+/* ===== ANAGRAFICA ATLETI (alias) =====
+   ATL_CANON: chiave normalizzata -> nome canonico.
+   La chiave e' normPersonRaw(): parole in minuscolo ordinate alfabeticamente,
+   quindi "MAGGIOLO GRAZIANO" e "Graziano Maggiolo" condividono la stessa chiave
+   e un solo alias copre tutte le grafie con le parole invertite.
+   Applicata SOLO IN LETTURA: i dati grezzi in "risultati" non vengono mai riscritti,
+   e togliere un alias riporta tutto com'era. */
+var ATL_CANON={};
+
+function normPersonRaw(s){
   return (s||'').trim().toLowerCase().split(/\s+/).filter(Boolean).sort().join(' ');
 }
+function canonPerson(s){
+  var c=ATL_CANON[normPersonRaw(s)];
+  return c||((s||'').trim());
+}
+/* chiave di un atleta nelle categorie individuali */
+function indKey(cognome,nome){
+  return canonPerson(((cognome||'')+' '+(nome||'')).trim()).toLowerCase().replace(/\s+/g,' ');
+}
+
+async function loadAtletiCanon(){
+  try{
+    var resp=await fetch(SUPA_URL+'/rest/v1/atleti_canonici?select=*',{headers:supaHeaders()});
+    var data=await resp.json();
+    ATL_CANON={};
+    if(Array.isArray(data))data.forEach(function(r){ATL_CANON[r.chiave]=r.nome_canonico;});
+  }catch(e){console.error('loadAtletiCanon error',e);}
+}
+
+async function saveAtletaCanonical(nomeOcr,nomeCanon){
+  var k=normPersonRaw(nomeOcr);
+  if(!k||!nomeCanon)return;
+  ATL_CANON[k]=nomeCanon;
+  try{
+    await fetch(SUPA_URL+'/rest/v1/atleti_canonici',{
+      method:'POST',
+      headers:Object.assign({},supaHeaders(),{'Prefer':'resolution=merge-duplicates'}),
+      body:JSON.stringify({chiave:k,nome_ocr:(nomeOcr||'').trim(),nome_canonico:(nomeCanon||'').trim()})
+    });
+  }catch(e){console.error('saveAtletaCanonical error',e);}
+}
+
+async function removeAtletaCanonical(chiave){
+  delete ATL_CANON[chiave];
+  try{
+    await fetch(SUPA_URL+'/rest/v1/atleti_canonici?chiave=eq.'+encodeURIComponent(chiave),
+      {method:'DELETE',headers:supaHeaders()});
+  }catch(e){console.error('removeAtletaCanonical error',e);}
+}
+
+/* Unisce due identita' segnalate come simili.
+   Per le coppie ("A / B") allinea il partecipante che differisce, accoppiando
+   ogni nome della grafia da scartare con il piu' somigliante di quella da tenere. */
+async function mergeAnomaly(keep,drop){
+  var A=String(keep||'').split(' / '), B=String(drop||'').split(' / ');
+  if(A.length===2&&B.length===2){
+    for(var i=0;i<B.length;i++){
+      var best=null,bs=-1;
+      for(var j=0;j<A.length;j++){
+        var sc=similarity(normPersonRaw(A[j]),normPersonRaw(B[i]));
+        if(sc>bs){bs=sc;best=A[j];}
+      }
+      if(best&&normPersonRaw(best)!==normPersonRaw(B[i])) await saveAtletaCanonical(B[i],best);
+    }
+  } else {
+    await saveAtletaCanonical(drop,keep);
+  }
+}
+
+async function mergeAnomalyAndRefresh(keep,drop,btn){
+  if(btn){btn.textContent='…';btn.disabled=true;}
+  await mergeAnomaly(keep,drop);
+  renderSettings();
+}
+
+async function removeAtletaAndRefresh(chiave){
+  await removeAtletaCanonical(chiave);
+  renderSettings();
+}
+
+function buildAtletiCanonBox(){
+  var ks=Object.keys(ATL_CANON);
+  if(!ks.length)return '';
+  var righe=ks.sort(function(a,b){
+    return ATL_CANON[a].toLowerCase().localeCompare(ATL_CANON[b].toLowerCase());
+  }).map(function(k){
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--s2);border-radius:6px;margin-bottom:6px;font-size:13px">'+
+      '<span style="color:var(--tx3);flex:1">'+esc(k)+'</span>'+
+      '<span style="color:var(--tx3)">&rarr;</span>'+
+      '<span style="font-weight:600;flex:1">'+esc(ATL_CANON[k])+'</span>'+
+      '<button class="btn bg bsm" onclick="removeAtletaAndRefresh(\''+esc(k).replace(/'/g,"\\'")+'\')">Annulla</button>'+
+      '</div>';
+  }).join('');
+  return '<div class="card" style="margin-bottom:16px;border-color:rgba(52,211,153,.3)">'+
+    '<div class="ct">&#x1F517; Anagrafica atleti ('+ks.length+' alias)</div>'+
+    '<p style="font-size:12px;color:var(--tx2);margin-bottom:12px">Grafie unificate. I dati grezzi delle tappe non sono stati modificati: togliendo un alias tutto torna come prima.</p>'+
+    righe+'</div>';
+}
+
+function normPerson(s){ return normPersonRaw(canonPerson(s)); }
 function pairKey(a,b){
   var na=normPerson(a), nb=normPerson(b);
   return na<=nb ? na+'/'+nb : nb+'/'+na;
 }
 function pairDisplay(a,b){
   var na=normPerson(a), nb=normPerson(b);
-  var da=(a||'').trim(), db=(b||'').trim();
+  var da=canonPerson(a), db=canonPerson(b);
   return na<=nb ? da+' / '+db : db+' / '+da;
 }
 function levenshtein(a,b){
@@ -465,12 +564,12 @@ function renderDash(){
         if(res.catId!==cat.id)return;
         res.rows.forEach(function(row){
           if(!isASD(row.assoc||''))return;
-          var key=norm(row.cognome||'')+' '+norm(row.nome||'')+'__'+cat.id;
+          var key=indKey(row.cognome,row.nome)+'__'+cat.id;
           if(seen[key])return;
           seen[key]=true;
           myAthletes.push({
             key:key,
-            display:((row.cognome||'')+' '+(row.nome||'')).trim(),
+            display:canonPerson(((row.cognome||'')+' '+(row.nome||'')).trim()),
             cognome:row.cognome||'',
             nome:row.nome||'',
             assoc:row.assoc||'',
@@ -487,7 +586,7 @@ function renderDash(){
       var rank=null,threshold=null,qualified=false;
       if(cir){
         var standings=getStandings(cir,a.catId);
-        var key=norm(a.cognome)+' '+norm(a.nome);
+        var key=indKey(a.cognome,a.nome);
         for(var i=0;i<standings.length;i++){
           if(standings[i].key===key){
             rank={pos:standings[i].pos,total:standings[i].total};
@@ -1255,11 +1354,11 @@ function getAllAthletes(){
     Object.values(DB.results).forEach(function(res){
       if(res.catId!==cat.id)return;
       res.rows.forEach(function(row){
-        var key=norm(row.cognome||'')+' '+norm(row.nome||'')+'__'+cat.id;
+        var key=indKey(row.cognome,row.nome)+'__'+cat.id;
         if(!map[key]){
           map[key]={
             key:key,
-            display:((row.cognome||'')+' '+(row.nome||'')).trim(),
+            display:canonPerson(((row.cognome||'')+' '+(row.nome||'')).trim()),
             cognome:row.cognome||'',
             nome:row.nome||'',
             assoc:row.assoc||'',
@@ -1292,7 +1391,7 @@ function getAthleteHistory(athlete){
     if(!res)return;
     for(var i=0;i<res.rows.length;i++){
       var r=res.rows[i];
-      if(norm(r.cognome||'')===norm(athlete.cognome)&&norm(r.nome||'')===norm(athlete.nome)){
+      if(indKey(r.cognome,r.nome)===indKey(athlete.cognome,athlete.nome)){
         var cirId=getAthleteCircuit(athlete.assoc)||st.circuits[0];
         var ptsPos=isTappaItalia(st.id)?posToPointsTI(r.pos):posToPoints(r.pos);
         var jolly=st.jollyFor.indexOf(cirId)>=0;
@@ -1326,7 +1425,7 @@ function getAthleteCurrentRank(athlete){
   var cir=getAthleteCircuit(athlete.assoc);
   if(!cir)return null;
   var standings=getStandings(cir,athlete.catId);
-  var key=norm(athlete.cognome)+' '+norm(athlete.nome);
+  var key=indKey(athlete.cognome,athlete.nome);
   for(var i=0;i<standings.length;i++){
     if(standings[i].key===key){
       return {pos:standings[i].pos,total:standings[i].total,circuit:cir,allStandings:standings};
@@ -1932,13 +2031,17 @@ function renderSettings(){
         ?('<span style="color:var(--tx)">'+a.name1+'</span>')
         :('<span style="color:var(--tx)">'+a.name1+'</span> &harr; <span style="color:var(--tx)">'+a.name2+'</span>');
       var n2esc=a.isRepeat?'__repeat__':a.name2.replace(/\'/g,"\\'").replace(/"/g,'&quot;');
-      anomHtml+='<div style="padding:10px;background:#fff7e6;border-radius:6px;margin-bottom:8px;font-size:13px"><div style="font-weight:600;color:#92400e">'+a.cat+' &mdash; '+desc+'</div><div style="margin:6px 0">'+names+'</div><button class="btn bg bsm" onclick="ignoreAnomalyAndRefresh(\''+a.name1.replace(/\'/g,"\\'").replace(/"/g,'&quot;')+'\',\''+n2esc+'\')">Ignora</button></div>';
+      var e1=a.name1.replace(/\'/g,"\\'").replace(/"/g,'&quot;');
+      var merge=a.isRepeat?'':
+        '<button class="btn bg bsm" style="border-color:var(--grn);color:var(--grn)" onclick="mergeAnomalyAndRefresh(\''+e1+'\',\''+n2esc+'\',this)">&#x1F517; Tieni il primo</button>'+
+        '<button class="btn bg bsm" style="border-color:var(--grn);color:var(--grn)" onclick="mergeAnomalyAndRefresh(\''+n2esc+'\',\''+e1+'\',this)">&#x1F517; Tieni il secondo</button>';
+      anomHtml+='<div style="padding:10px;background:#fff7e6;border-radius:6px;margin-bottom:8px;font-size:13px"><div style="font-weight:600;color:#92400e">'+a.cat+' &mdash; '+desc+'</div><div style="margin:6px 0">'+names+'</div><div style="display:flex;gap:6px;flex-wrap:wrap">'+merge+'<button class="btn bg bsm" onclick="ignoreAnomalyAndRefresh(\''+e1+'\',\''+n2esc+'\')">Ignora</button></div></div>';
     });
     anomHtml+='</div>';
   } else {
     anomHtml='<div class="al ao" style="margin-bottom:16px">&#x2705; Nessuna anomalia rilevata</div>';
   }
-  el.innerHTML='<div style="max-width:600px"><h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:20px">&#x2699;&#xFE0F; <span style="color:var(--sic)">IMPOSTAZIONI</span></h2><div class="card" style="margin-bottom:16px;border-color:rgba(52,211,153,.3)"><div class="ct">&#x1F916; Motore OCR</div><p style="color:var(--tx2);font-size:13px">OCR tramite <strong>Gemini AI</strong> via Supabase Edge Function, con <strong>doppia lettura</strong> su due modelli e controllo aritmetico Punti/Totale &mdash; nessuna API key da configurare nell\'app.</p></div><div class="card" style="margin-bottom:16px"><div class="ct">&#x1F3C3; ASD da evidenziare</div><div class="fg"><label>Nome ASD (ricerca parziale)</label><input type="text" id="set-asd" value="'+(DB.settings.asdHighlight||'')+'" placeholder="es. Sile Walking"></div></div><button class="btn bp" onclick="saveSettings()">&#x1F4BE; Salva impostazioni</button><div class="div"></div>'+anomHtml+'<div class="card" style="border-color:rgba(230,51,41,.3)"><div class="ct" style="color:var(--red2)">&#x26A0;&#xFE0F; Gestione dati</div><p style="color:var(--tx2);font-size:13px;margin-bottom:16px">Database: <strong>'+Object.keys(DB.results).length+' classifiche</strong> salvate.</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn bs2" onclick="expFullDB()">&#x1F4CA; Export completo DB</button><button class="btn bg" style="color:var(--red);border-color:var(--red)" onclick="confirmReset()">&#x1F5D1;&#xFE0F; Cancella tutti i dati</button></div></div></div>';
+  el.innerHTML='<div style="max-width:600px"><h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:20px">&#x2699;&#xFE0F; <span style="color:var(--sic)">IMPOSTAZIONI</span></h2><div class="card" style="margin-bottom:16px;border-color:rgba(52,211,153,.3)"><div class="ct">&#x1F916; Motore OCR</div><p style="color:var(--tx2);font-size:13px">OCR tramite <strong>Gemini AI</strong> via Supabase Edge Function, con <strong>doppia lettura</strong> su due modelli e controllo aritmetico Punti/Totale &mdash; nessuna API key da configurare nell\'app.</p></div><div class="card" style="margin-bottom:16px"><div class="ct">&#x1F3C3; ASD da evidenziare</div><div class="fg"><label>Nome ASD (ricerca parziale)</label><input type="text" id="set-asd" value="'+(DB.settings.asdHighlight||'')+'" placeholder="es. Sile Walking"></div></div><button class="btn bp" onclick="saveSettings()">&#x1F4BE; Salva impostazioni</button><div class="div"></div>'+buildAtletiCanonBox()+anomHtml+'<div class="card" style="border-color:rgba(230,51,41,.3)"><div class="ct" style="color:var(--red2)">&#x26A0;&#xFE0F; Gestione dati</div><p style="color:var(--tx2);font-size:13px;margin-bottom:16px">Database: <strong>'+Object.keys(DB.results).length+' classifiche</strong> salvate.</p><div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn bs2" onclick="expFullDB()">&#x1F4CA; Export completo DB</button><button class="btn bg" style="color:var(--red);border-color:var(--red)" onclick="confirmReset()">&#x1F5D1;&#xFE0F; Cancella tutti i dati</button></div></div></div>';
 }
 
 function saveSettings(){
@@ -2099,7 +2202,7 @@ function fmtDT(iso){try{return new Date(iso).toLocaleString('it-IT',{day:'2-digi
 function fmtDs(iso){try{return new Date(iso).toLocaleDateString('it-IT',{day:'2-digit',month:'short'});}catch(e){return iso;}}
 
 loadSettings();
-Promise.all([loadAllResults(), loadASDMap()]).then(function(){
+Promise.all([loadAllResults(), loadASDMap(), loadAtletiCanon()]).then(function(){
   if(PUBLIC_MODE){
     ['t-upload','t-settings','t-asd'].forEach(function(id){
       var el=document.getElementById(id);
