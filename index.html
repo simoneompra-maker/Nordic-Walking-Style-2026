@@ -480,13 +480,39 @@ function getAllNamesForCat(catId){
   });
   return Object.keys(names);
 }
+/* Due identita' che compaiono nella STESSA tappa della stessa categoria non
+   possono essere la stessa persona: nessuno arriva primo e ventiseiesimo nella
+   stessa gara. Serve a non proporre fusioni impossibili fra omonimi. */
+function nameStagesMap(catId){
+  var cat=CATS.find(function(c){return c.id===catId;});
+  var m={};
+  if(!cat)return m;
+  Object.values(DB.results).forEach(function(res){
+    if(res.catId!==catId)return;
+    res.rows.forEach(function(row){
+      var n=cat.type==='cop'?pairDisplay(row.p1,row.p2):((row.cognome||'')+' '+(row.nome||'')).trim();
+      if(!n)return;
+      var k=normPersonRaw(n);
+      if(!m[k])m[k]={};
+      m[k][res.stageId]=true;
+    });
+  });
+  return m;
+}
+function sameStageClash(map,a,b){
+  var A=map[normPersonRaw(a)]||{}, B=map[normPersonRaw(b)]||{};
+  for(var st in A){ if(B[st])return true; }
+  return false;
+}
+
 function findSimilarName(name, catId){
   var existing=getAllNamesForCat(catId);
   var ignored=getIgnoredAnomalies();
+  var stagesMap=nameStagesMap(catId);
   for(var i=0;i<existing.length;i++){
     var ex=existing[i];
     var sim=nameSim(ex,name);
-    if(sim>=0.85&&sim<1){
+    if(sim>=0.85&&sim<1&&!sameStageClash(stagesMap,ex,name)){
       var pair=[name,ex].sort().join('||');
       if(ignored.indexOf(pair)>=0)continue;
       return {similar:ex, score:sim};
@@ -510,11 +536,12 @@ function detectAllAnomalies(){
   var results=[];
   CATS.forEach(function(cat){
     var names=getAllNamesForCat(cat.id);
+    var stagesMap=nameStagesMap(cat.id);
     for(var i=0;i<names.length;i++){
       for(var j=i+1;j<names.length;j++){
         var a=names[i], b=names[j];
         var sim=nameSim(a,b);
-        if(sim>=0.85&&sim<1){
+        if(sim>=0.85&&sim<1&&!sameStageClash(stagesMap,a,b)){
           var pair=[names[i],names[j]].sort().join('||');
           if(ignored.indexOf(pair)>=0)continue;
           results.push({cat:cat.name,catId:cat.id,name1:names[i],name2:names[j],score:sim});
