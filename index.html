@@ -277,7 +277,7 @@ function getStandings(cirId,catId){
       var key=cat.type==='cop'
         ?pairKey(row.p1,row.p2)
         :indKey(row.cognome,row.nome);
-      if(!map[key])map[key]={key:key,display:cat.type==='cop'?pairDisplay(row.p1,row.p2):canonPerson(((row.cognome||'')+' '+(row.nome||'')).trim()),assoc:row.assoc||'',stages:[],total:0};
+      if(!map[key])map[key]={key:key,display:(cat.type==='cop'?pairDisplay(row.p1,row.p2):canonPerson(((row.cognome||'')+' '+(row.nome||'')).trim())).toUpperCase(),assoc:row.assoc||'',stages:[],total:0};
       var pts=isTappaItalia(st.id)?posToPointsTI(row.pos):posToPoints(row.pos);
       var used=jolly?pts*2:pts;
       map[key].stages.push({stageId:st.id,stageName:st.name,pts:pts,ptsUsed:used,isJolly:jolly});
@@ -1331,7 +1331,7 @@ function closeModal(){document.getElementById('mo').classList.remove('open');}
 function buildASDClassContent(cirId){
   var t=asdCircTable(cirId);
   var natRows=getASDNationalStandings();
-  var stickA='position:sticky;left:0;z-index:1;background:var(--bg)';
+  var stickA='position:sticky;left:0;z-index:1;background:var(--s1)';
   function asdCell(r){
     var hl=isASD(r.asd);
     return '<td style="'+stickA+';min-width:170px;font-weight:'+(hl?600:400)+';color:'+(hl?'var(--red)':'var(--tx)')+'">'+r.asd+'</td>';
@@ -1340,7 +1340,7 @@ function buildASDClassContent(cirId){
   if(!t.data.length){
     circHtml='<div class="se">Nessun dato per '+CIR[cirId].name+'</div>';
   } else {
-    var th='<th>POS</th><th style="'+stickA.replace('var(--bg)','var(--s2)')+'">ASD</th>'+
+    var th='<th>POS</th><th style="'+stickA.replace('var(--s1)','var(--s2)')+'">ASD</th>'+
       t.stgs.map(function(s){return '<th style="text-align:right;white-space:nowrap">'+asdStageLabel(s,cirId)+'</th>';}).join('')+
       '<th style="text-align:right">TOTALE</th>';
     var body=t.data.map(function(d,i){
@@ -1377,7 +1377,7 @@ function buildASDClassContent(cirId){
         '</tr>';
     }).join('');
     natHtml='<div class="expblk" data-exp="Nazionale" style="margin-top:20px"><div style="font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:10px">&#x1F30D; Classifica Nazionale a Squadre</div>'+
-      '<div class="tw"><table><thead><tr><th>POS</th><th style="'+stickA.replace('var(--bg)','var(--s2)')+'">ASD</th><th style="text-align:right">1ª TAPPA</th><th style="text-align:right">2ª TAPPA</th><th style="text-align:right">3ª TAPPA</th><th style="text-align:right">T. ITALIA</th><th style="text-align:right">FINALISSIMA</th><th style="text-align:right">TOTALE</th></tr></thead><tbody>'+natBody+'</tbody></table></div>'+
+      '<div class="tw"><table><thead><tr><th>POS</th><th style="'+stickA.replace('var(--s1)','var(--s2)')+'">ASD</th><th style="text-align:right">1ª TAPPA</th><th style="text-align:right">2ª TAPPA</th><th style="text-align:right">3ª TAPPA</th><th style="text-align:right">T. ITALIA</th><th style="text-align:right">FINALISSIMA</th><th style="text-align:right">TOTALE</th></tr></thead><tbody>'+natBody+'</tbody></table></div>'+
       '<p style="font-size:11px;color:var(--tx3);margin-top:8px">Per ogni ASD: le <strong>3 migliori tappe</strong> del proprio circuito (sotto il punteggio il nome della tappa) + Tappa Italia + Finalissima. Stesse regole di punteggio della classifica di circuito, tappa a 0 senza almeno un istruttore e un camminatore.</p></div>';
   }
 
@@ -2483,27 +2483,31 @@ function expFilename(ext){
    un contenitore fuori schermo di larghezza fissa, così l'export è identico
    da telefono e da PC. Oltre le 25 righe la classifica viene divisa in più
    parti, ognuna con intestazione, titolo e nota ripetuti.               */
-var EXP_WIDTH=1400;      // larghezza di rendering in px
+var EXP_WIDTH=1400;      // larghezza di rendering in px (PDF, A4 orizzontale)
+var EXP_IMG_WIDTH=1080;  // larghezza immagini PNG: formato verticale, colonne compatte
 var EXP_SCALE=3;         // moltiplicatore di risoluzione
-var EXP_ROWS_PER_PAGE=22;// righe per parte
+var EXP_ROWS_PER_PAGE=22;// righe per parte (PDF)
+var EXP_IMG_ROWS=35;     // max righe per immagine PNG (parti bilanciate, formato verticale)
 
 /* Divide il contenuto da esportare in "parti".
    Se dentro #exp-wrap ci sono blocchi .expblk (vista Classifica ASD: una tabella
    per il circuito e una nazionale) ogni blocco viene esportato per conto suo, cosi'
    le righe di una tabella non finiscono mai mescolate con quelle dell'altra.
    Senza .expblk il comportamento e' identico a prima. */
-function splitRows(n,extra){
+function splitRows(n,extra,per){
+  per=per||EXP_ROWS_PER_PAGE;
   var out=[];
-  if(n<=25){out.push(Object.assign({part:1,parts:1},extra||{}));return out;}
-  var tot=Math.ceil(n/EXP_ROWS_PER_PAGE),p=0;
-  for(var i=0;i<n;i+=EXP_ROWS_PER_PAGE){
+  if(n<=per+3){out.push(Object.assign({part:1,parts:1},extra||{}));return out;}
+  var tot=Math.ceil(n/per),p=0;
+  per=Math.ceil(n/tot); /* parti bilanciate: niente ultima immagine con 3-4 righe */
+  for(var i=0;i<n;i+=per){
     p++;
-    out.push(Object.assign({a:i,b:Math.min(i+EXP_ROWS_PER_PAGE,n),part:p,parts:tot},extra||{}));
+    out.push(Object.assign({a:i,b:Math.min(i+per,n),part:p,parts:tot},extra||{}));
   }
   return out;
 }
 
-function expChunks(){
+function expChunks(per){
   var el=document.getElementById('exp-wrap');
   if(!el)return null;
   var blks=el.querySelectorAll('.expblk');
@@ -2513,23 +2517,25 @@ function expChunks(){
       var tb=blks[b].querySelector('table');
       var nb=tb?tb.querySelectorAll('tbody tr').length:0;
       if(!nb)continue;
-      out=out.concat(splitRows(nb,{blk:b,lab:blks[b].getAttribute('data-exp')||('blocco'+(b+1))}));
+      out=out.concat(splitRows(nb,{blk:b,lab:blks[b].getAttribute('data-exp')||('blocco'+(b+1))},per));
     }
     return out.length?out:null;
   }
   var tbl=el.querySelector('table');
   if(!tbl)return [null];
   var n=tbl.querySelectorAll('tbody tr').length;
-  if(n<=25)return [null];
-  return splitRows(n);
+  if(n<=(per||EXP_ROWS_PER_PAGE)+3)return [null];
+  return splitRows(n,null,per);
 }
 
-function expRender(ck,part,total){
+function expRender(ck,part,total,opt){
+  opt=opt||{};
+  var W=opt.width||EXP_WIDTH;
   return new Promise(function(resolve,reject){
     var src=document.getElementById('exp-wrap');
     if(!src){reject(new Error('exp-wrap assente'));return;}
     var host=document.createElement('div');
-    host.style.cssText='position:fixed;left:-20000px;top:0;width:'+EXP_WIDTH+'px;background:#fff;padding:24px;box-sizing:border-box;z-index:-1';
+    host.style.cssText='position:fixed;left:-20000px;top:0;width:'+W+'px;background:#fff;padding:'+(opt.compact?16:24)+'px;box-sizing:border-box;z-index:-1';
     var clone=src.cloneNode(true);
     clone.style.width='100%';
     /* tiene solo il blocco richiesto, se il contenuto e' diviso in blocchi */
@@ -2542,6 +2548,10 @@ function expRender(ck,part,total){
     });
     Array.prototype.slice.call(clone.querySelectorAll('table')).forEach(function(t){
       t.style.minWidth='0';
+    });
+    /* la colonna fissa (sticky) serve solo a video: html2canvas la disegna fuori posto */
+    Array.prototype.slice.call(clone.querySelectorAll('th,td')).forEach(function(c){
+      if(c.style.position==='sticky'){c.style.position='static';c.style.minWidth='0';c.style.background='transparent';}
     });
     if(ck&&ck.a!=null){
       var tb0=clone.querySelector('table');
@@ -2556,7 +2566,8 @@ function expRender(ck,part,total){
     }
     host.appendChild(clone);
     document.body.appendChild(host);
-    html2canvas(host,{backgroundColor:'#ffffff',scale:EXP_SCALE,width:EXP_WIDTH,windowWidth:EXP_WIDTH}).then(function(canvas){
+    if(opt.compact)expCompact(clone);
+    html2canvas(host,{backgroundColor:'#ffffff',scale:EXP_SCALE,width:W,windowWidth:W}).then(function(canvas){
       if(host.parentNode)host.parentNode.removeChild(host);
       resolve(canvas);
     }).catch(function(e){
@@ -2566,28 +2577,101 @@ function expRender(ck,part,total){
   });
 }
 
+/* Stile compatto per le immagini verticali: colonne strette, testo su una riga,
+   ASD abbreviata con i puntini se troppo lunga. Agisce solo sulla copia da esportare. */
+function expCompact(root){
+  var st=document.createElement('style');
+  st.textContent=
+    '.card{padding:14px!important}'+
+    'table{font-size:13px!important}'+
+    'thead th{padding:7px 3px!important;font-size:9.5px!important;letter-spacing:.2px!important}'+
+    'tbody td{padding:6px 3px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'+
+    'table.tcomp tbody td:nth-child(2){padding-left:6px!important;padding-right:4px!important;font-size:13px!important}'+
+    'table.tcomp tbody td:nth-child(3){padding-left:4px!important;padding-right:4px!important;font-size:10.5px!important}'+
+    'table.tcomp thead th:nth-child(2),table.tcomp thead th:nth-child(3){padding-left:6px!important;padding-right:4px!important}'+
+    '.pb{width:22px!important;height:22px!important;font-size:12px!important}'+
+    '.pts{font-size:14px!important}';
+  root.insertBefore(st,root.firstChild);
+  /* colonne della classifica individuale/coppie ricalibrate per 1080 px */
+  Array.prototype.slice.call(root.querySelectorAll('table.tcomp')).forEach(function(t){
+    var cols=t.querySelectorAll('col');
+    if(cols.length<6)return;
+    var nStg=cols.length-5, stgW=(40/nStg).toFixed(2);
+    var w=['8%','25%','17%','4%'];
+    for(var i=0;i<cols.length;i++){
+      cols[i].style.width=i<4?w[i]:(i===cols.length-1?'6%':stgW+'%');
+    }
+  });
+}
+
 function expImg(){
   if(typeof html2canvas==='undefined'){alert('Libreria immagine non disponibile.');return;}
-  var chunks=expChunks();
+  var chunks=expChunks(EXP_IMG_ROWS);
   if(!chunks||!chunks.length){alert('Niente da esportare: la classifica e\' vuota.');return;}
   var base=expFilename('png').replace(/\.png$/,'');
+  var items=[];
+  expImgPanel(null,chunks.length);
   var i=0;
   function step(){
-    if(i>=chunks.length)return;
-    expRender(chunks[i],i+1,chunks.length).then(function(canvas){
+    if(i>=chunks.length){expImgPanel(items,chunks.length);return;}
+    expRender(chunks[i],i+1,chunks.length,{width:EXP_IMG_WIDTH,compact:true}).then(function(canvas){
       var ck=chunks[i]||{};
       var suf=(ck.lab?'_'+ck.lab:'');
       if(ck.parts>1)suf+='_parte'+ck.part+'di'+ck.parts;
       else if(!ck.lab&&chunks.length>1)suf='_parte'+(i+1)+'di'+chunks.length;
-      var a=document.createElement('a');
-      a.href=canvas.toDataURL('image/png');
-      a.download=base+suf+'.png';
-      a.click();
+      var label=(ck.lab?ck.lab+' ':'')+(ck.parts>1?'parte '+ck.part+'/'+ck.parts+' ('+(ck.a+1)+'–'+ck.b+')':(chunks.length>1&&!ck.lab?'parte '+(i+1):''));
+      items.push({name:base+suf+'.png',label:label||'Classifica',url:canvas.toDataURL('image/png'),canvas:canvas});
       i++;
-      setTimeout(step,700);
-    }).catch(function(e){console.error('Export immagine:',e);alert('Errore durante l\'export immagine.');});
+      expImgPanel(items.length,chunks.length,true);
+      setTimeout(step,50);
+    }).catch(function(e){console.error('Export immagine:',e);expImgClose();alert('Errore durante l\'export immagine.');});
   }
   step();
+}
+
+/* Pannello immagini: ogni parte ha il suo pulsante "Scarica" (un clic = un download,
+   quindi il browser non blocca nulla) e, se il telefono lo consente, "Condividi". */
+function expImgClose(){var o=document.getElementById('exp-img-ov');if(o&&o.parentNode)o.parentNode.removeChild(o);}
+function expImgPanel(items,total,progress){
+  var ov=document.getElementById('exp-img-ov');
+  if(!ov){
+    ov=document.createElement('div');ov.id='exp-img-ov';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;display:flex;align-items:flex-start;justify-content:center;overflow:auto;padding:20px 12px';
+    ov.addEventListener('click',function(e){if(e.target===ov)expImgClose();});
+    document.body.appendChild(ov);
+  }
+  if(!Array.isArray(items)){
+    var done=typeof items==='number'?items:0;
+    ov.innerHTML='<div style="background:var(--bg);border-radius:12px;padding:20px;max-width:520px;width:100%;text-align:center;font-family:var(--fb)">Preparo le immagini&hellip; '+done+'/'+total+'</div>';
+    return;
+  }
+  var canShare=!!(navigator.canShare&&window.File);
+  var html='<div style="background:var(--bg);border-radius:12px;padding:16px;max-width:560px;width:100%;font-family:var(--fb)">'+
+    '<div style="display:flex;align-items:center;margin-bottom:12px"><strong style="font-family:var(--fh);font-size:18px">'+(items.length>1?items.length+' immagini pronte':'Immagine pronta')+'</strong>'+
+    '<button class="btn bg bsm" style="margin-left:auto" onclick="expImgClose()">Chiudi</button></div>'+
+    (items.length>1?'<p style="font-size:12px;color:var(--tx3);margin-bottom:12px">Scarica le parti una alla volta. Dal telefono puoi anche tenere premuto sull\'anteprima per salvarla.</p>':'');
+  items.forEach(function(it,ix){
+    html+='<div style="border:1px solid var(--brd);border-radius:10px;padding:10px;margin-bottom:10px">'+
+      '<div style="font-size:13px;font-weight:600;margin-bottom:8px">'+it.label+'</div>'+
+      '<img src="'+it.url+'" style="width:100%;border-radius:6px;border:1px solid var(--brd);display:block;margin-bottom:8px" alt="">'+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap">'+
+      '<a class="btn bp bsm" style="text-decoration:none" href="'+it.url+'" download="'+it.name+'">&#x2B07;&#xFE0F; Scarica</a>'+
+      (canShare?'<button class="btn bs2 bsm" onclick="expImgShare('+ix+')">&#x1F4E4; Condividi</button>':'')+
+      '</div></div>';
+  });
+  html+='</div>';
+  ov.innerHTML=html;
+  ov._items=items;
+}
+function expImgShare(ix){
+  var ov=document.getElementById('exp-img-ov');if(!ov||!ov._items)return;
+  var it=ov._items[ix];
+  it.canvas.toBlob(function(b){
+    var f=new File([b],it.name,{type:'image/png'});
+    if(navigator.canShare&&navigator.canShare({files:[f]})){
+      navigator.share({files:[f],title:it.name}).catch(function(){});
+    }
+  },'image/png');
 }
 
 function expPDF(){
