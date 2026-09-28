@@ -1329,38 +1329,58 @@ function closeModal(){document.getElementById('mo').classList.remove('open');}
 
 
 function buildASDClassContent(cirId){
-  var rows=getASDCircuitStandings(cirId);
+  var t=asdCircTable(cirId);
   var natRows=getASDNationalStandings();
-  
+  var stickA='position:sticky;left:0;z-index:1;background:var(--bg)';
+  function asdCell(r){
+    var hl=isASD(r.asd);
+    return '<td style="'+stickA+';min-width:170px;font-weight:'+(hl?600:400)+';color:'+(hl?'var(--red)':'var(--tx)')+'">'+r.asd+'</td>';
+  }
   var circHtml='';
-  if(!rows.length){
+  if(!t.data.length){
     circHtml='<div class="se">Nessun dato per '+CIR[cirId].name+'</div>';
   } else {
-    var body=rows.map(function(r,i){
+    var th='<th>POS</th><th style="'+stickA.replace('var(--bg)','var(--s2)')+'">ASD</th>'+
+      t.stgs.map(function(s){return '<th style="text-align:right;white-space:nowrap">'+asdStageLabel(s,cirId)+'</th>';}).join('')+
+      '<th style="text-align:right">TOTALE</th>';
+    var body=t.data.map(function(d,i){
+      var r=d.r;
+      var cells=d.cells.map(function(c){
+        if(!c)return '<td style="text-align:right;color:var(--tx3)">&ndash;</td>';
+        if(c.missing)return '<td style="text-align:right;color:var(--red);white-space:nowrap" title="0 punti: '+c.missing+' (regolamento punto 26)">0 &#x26A0;&#xFE0F;<div style="font-size:10px;color:var(--tx3)">'+c.missing.replace('istruttore','istr.').replace('camminatore','camm.')+'</div></td>';
+        return '<td style="text-align:right">'+c.pts+'</td>';
+      }).join('');
       return '<tr class="'+(isASD(r.asd)?'hl':'')+'">'+
-        '<td><span class="pb p'+(i<3?i+1:'x')+'">'+(i+1)+'</span></td>'+
-        '<td style="font-weight:'+(isASD(r.asd)?600:400)+';color:'+(isASD(r.asd)?'var(--red)':'var(--tx)')+'">'+r.asd+'</td>'+
-        '<td class="pts" style="color:var(--red)">'+r.total+'</td>'+
+        '<td><span class="pb p'+(i<3?i+1:'x')+'">'+(i+1)+'</span></td>'+asdCell(r)+cells+
+        '<td class="pts" style="text-align:right;color:var(--red)">'+r.total+'</td>'+
         '</tr>';
     }).join('');
-    circHtml='<div class="tw"><table><thead><tr><th>POS</th><th>ASD</th><th>PUNTI CIRCUITO</th></tr></thead><tbody>'+body+'</tbody></table></div>'+
-      '<p style="font-size:11px;color:var(--tx3);margin-top:8px">Per tappa: miglior atleta per cat. = punti posizione; altri: 10 pt (top 10), 5 pt (11°+). Jolly: totale tappa ×2. Solo categorie individuali. Si sommano <strong>tutte le tappe</strong> del circuito (Tappa Italia inclusa).</p>';
+    circHtml='<div class="tw"><table><thead><tr>'+th+'</tr></thead><tbody>'+body+'</tbody></table></div>'+
+      '<p style="font-size:11px;color:var(--tx3);margin-top:8px">Per tappa: miglior atleta per cat. = punti posizione; altri: 10 pt (top 10), 5 pt (11°+). Jolly (J×2): totale tappa ×2. Solo categorie individuali. Si sommano <strong>tutte le tappe</strong> del circuito (Tappa Italia inclusa). <strong>0 &#x26A0;&#xFE0F;</strong> = tappa a zero perch&eacute; l\'ASD non aveva almeno un istruttore e un camminatore (punto 26), sotto lo zero il motivo. &ndash; = ASD assente o tappa non caricata.</p>';
   }
-  
+
   var natHtml='';
   if(natRows.length){
     var natBody=natRows.map(function(r,i){
+      var b3='';
+      for(var k=0;k<3;k++){
+        var b=r.best3[k];
+        b3+=b?'<td style="text-align:right;white-space:nowrap"><strong>'+b.pts+'</strong><div style="font-size:10px;color:var(--tx3)">'+stageName(b.stageId)+'</div></td>':'<td style="text-align:right;color:var(--tx3)">&ndash;</td>';
+      }
+      var tiC=!r.tiSt?'<td style="text-align:right;color:var(--tx3)">&ndash;</td>':
+        (r.tiSt.missing?'<td style="text-align:right;color:var(--red);white-space:nowrap" title="0 punti: '+r.tiSt.missing+'">0 &#x26A0;&#xFE0F;<div style="font-size:10px;color:var(--tx3)">'+r.tiSt.missing.replace('istruttore','istr.').replace('camminatore','camm.')+'</div></td>':'<td style="text-align:right">'+r.ti+'</td>');
+      var finC=r.hasFin?'<td style="text-align:right">'+r.fin+'</td>':'<td style="text-align:right;color:var(--tx3)">&ndash;</td>';
       return '<tr class="'+(isASD(r.asd)?'hl':'')+'">'+
-        '<td><span class="pb p'+(i<3?i+1:'x')+'">'+(i+1)+'</span></td>'+
-        '<td style="font-weight:'+(isASD(r.asd)?600:400)+';color:'+(isASD(r.asd)?'var(--red)':'var(--tx)')+'">'+r.asd+'</td>'+
-        '<td class="pts" style="color:var(--cs)">'+r.total+'</td>'+
+        '<td><span class="pb p'+(i<3?i+1:'x')+'">'+(i+1)+'</span></td>'+asdCell(r)+
+        b3+tiC+finC+
+        '<td class="pts" style="text-align:right;color:var(--cs)">'+r.total+'</td>'+
         '</tr>';
     }).join('');
     natHtml='<div class="expblk" data-exp="Nazionale" style="margin-top:20px"><div style="font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:10px">&#x1F30D; Classifica Nazionale a Squadre</div>'+
-      '<div class="tw"><table><thead><tr><th>POS</th><th>ASD</th><th>PUNTI NAZIONALI</th></tr></thead><tbody>'+natBody+'</tbody></table></div>'+
-      '<p style="font-size:11px;color:var(--tx3);margin-top:8px">Per ogni ASD: <strong>3 migliori tappe</strong> del proprio circuito + Tappa Italia + Finalissima. Per tappa: miglior atleta per cat. = punti pieno; altri: 10 pt (top 10), 5 pt (11°+).</p></div>';
+      '<div class="tw"><table><thead><tr><th>POS</th><th style="'+stickA.replace('var(--bg)','var(--s2)')+'">ASD</th><th style="text-align:right">1ª TAPPA</th><th style="text-align:right">2ª TAPPA</th><th style="text-align:right">3ª TAPPA</th><th style="text-align:right">T. ITALIA</th><th style="text-align:right">FINALISSIMA</th><th style="text-align:right">TOTALE</th></tr></thead><tbody>'+natBody+'</tbody></table></div>'+
+      '<p style="font-size:11px;color:var(--tx3);margin-top:8px">Per ogni ASD: le <strong>3 migliori tappe</strong> del proprio circuito (sotto il punteggio il nome della tappa) + Tappa Italia + Finalissima. Stesse regole di punteggio della classifica di circuito, tappa a 0 senza almeno un istruttore e un camminatore.</p></div>';
   }
-  
+
   return '<div class="expblk" data-exp="Circuito"><div style="font-family:var(--fh);font-weight:700;font-size:16px;margin-bottom:10px">&#x1F3C6; Classifica ASD &ndash; '+CIR[cirId].name+'</div>'+circHtml+'</div>'+natHtml;
 }
 
@@ -1891,6 +1911,22 @@ function posToPointsTI(pos){
 
 function isTappaItalia(stageId){ return stageId==='bologna-ti'; }
 
+// ── REQUISITO ISTRUTTORE + CAMMINATORE (regolamento punto 26) ──
+// Restituisce null se l'ASD in quella tappa ha almeno un istruttore (M o F)
+// e almeno un camminatore (M o F); altrimenti il testo di cosa manca.
+function asdStageMissing(catMap){
+  catMap=catMap||{};
+  var hasI=!!((catMap['istruttore-m']||[]).length||(catMap['istruttore-f']||[]).length);
+  var hasC=!!((catMap['camminatore-m']||[]).length||(catMap['camminatore-f']||[]).length);
+  if(hasI&&hasC)return null;
+  if(!hasI&&!hasC)return 'manca istruttore e camminatore';
+  return hasI?'manca camminatore':'manca istruttore';
+}
+function stageName(id){
+  var s=STAGES.find(function(x){return x.id===id;});
+  return s?(s.name+(isTappaItalia(id)?' (TI)':'')):id;
+}
+
 // ── CLASSIFICA ASD PER CIRCUITO ──────────────────────────────
 // FIX 7 (regola confermata dagli organizzatori, set. 2026):
 // - Classifica ASD di CIRCUITO: si sommano TUTTE le tappe del circuito (Tappa Italia inclusa,
@@ -1944,8 +1980,11 @@ function getASDCircuitStandings(cirId){
         for(var k=1;k<poss.length;k++){stagePts+=(poss[k]<=10?10:5);}
       });
       if(isJolly)stagePts*=2;
+      // Punto 26: senza almeno un istruttore E un camminatore la tappa vale 0
+      var miss=asdStageMissing(stageData[canon]);
+      if(miss)stagePts=0;
       if(!asdStagePts[canon])asdStagePts[canon]=[];
-      asdStagePts[canon].push({stageId:st.id,pts:stagePts,isTI:isTappaItalia(st.id)});
+      asdStagePts[canon].push({stageId:st.id,pts:stagePts,isTI:isTappaItalia(st.id),missing:miss});
     });
   }
 
@@ -1990,34 +2029,79 @@ function getASDStagePts(stageId,useTiScale){
       stagePts+=(useTiScale?posToPointsTI(poss[0]):posToPoints(poss[0]));
       for(var k=1;k<poss.length;k++){stagePts+=(poss[k]<=10?10:5);}
     });
+    // Punto 26: senza almeno un istruttore E un camminatore la tappa vale 0
+    if(asdStageMissing(stageData[canon]))stagePts=0;
     result[canon]=stagePts;
   });
   return result;
 }
 
 function getASDNationalStandings(){
+  // Per ogni ASD: 3 migliori tappe di circuito (TI esclusa dalla scelta) + Tappa Italia + Finalissima.
+  // Le tappe arrivano dal dettaglio di circuito (regola punto 26 gia' applicata).
+  // Un'ASD senza circuito assegnato compare in piu' circuiti: le tappe sono deduplicate
+  // per id, cosi' la Tappa Italia viene contata una sola volta.
   var asdMap={};
-  // 1. Per ogni circuito: 3 migliori tappe del circuito (Tappa Italia esclusa dalla scelta)
-  //    + punti Tappa Italia sommati sempre. La TI arriva dal dettaglio del circuito,
-  //    quindi e' contata una sola volta e nel circuito dell'ASD.
   ['nord','cs','sic'].forEach(function(cirId){
     getASDCircuitStandings(cirId).forEach(function(r){
-      var circ=r.stages.filter(function(x){return !x.isTI;})
-        .map(function(x){return x.pts;}).sort(function(a,b){return b-a;});
-      var best3=circ.slice(0,3).reduce(function(s,p){return s+p;},0);
-      var ti=r.stages.filter(function(x){return x.isTI;})
-        .reduce(function(s,x){return s+x.pts;},0);
-      if(!asdMap[r.asd])asdMap[r.asd]={asd:r.asd,total:0};
-      asdMap[r.asd].total+=best3+ti;
+      if(!asdMap[r.asd])asdMap[r.asd]={asd:r.asd,cirs:[],stById:{}};
+      var m=asdMap[r.asd];
+      if(m.cirs.indexOf(cirId)<0)m.cirs.push(cirId);
+      r.stages.forEach(function(x){m.stById[x.stageId]=x;});
     });
   });
-  // 2. Finalissima (standard scale; no jolly) — unica tappa esclusa dai circuiti
   var finPts=getASDStagePts('san-dona',false);
   Object.keys(finPts).forEach(function(asd){
-    if(!asdMap[asd])asdMap[asd]={asd:asd,total:0};
-    asdMap[asd].total+=finPts[asd];
+    if(!asdMap[asd])asdMap[asd]={asd:asd,cirs:[],stById:{}};
   });
-  return Object.values(asdMap).sort(function(a,b){return b.total-a.total;}).map(function(a,i){a.pos=i+1;return a;});
+  return Object.values(asdMap).map(function(m){
+    var all=Object.values(m.stById);
+    var circ=all.filter(function(x){return !x.isTI;}).sort(function(a,b){return b.pts-a.pts;});
+    var best3=circ.slice(0,3);
+    var tiSt=all.filter(function(x){return x.isTI;})[0]||null;
+    var ti=tiSt?tiSt.pts:0;
+    var fin=finPts[m.asd]||0;
+    var total=best3.reduce(function(s,x){return s+x.pts;},0)+ti+fin;
+    return {asd:m.asd,cirs:m.cirs,best3:best3,tiSt:tiSt,ti:ti,fin:fin,hasFin:(m.asd in finPts),total:total};
+  }).sort(function(a,b){return b.total-a.total;}).map(function(a,i){a.pos=i+1;return a;});
+}
+
+// ── TABELLE ASD CON PUNTEGGI PER TAPPA ────────────────────────
+// Una sola sorgente dati per video, CSV, Excel e dossier.
+function asdStageLabel(st,cirId){
+  var n=isTappaItalia(st.id)?'TI '+st.name:st.name;
+  if(st.jollyFor.indexOf(cirId)>=0)n+=' (J×2)';
+  return n;
+}
+function asdCircTable(cirId){
+  var stgs=STAGES.filter(function(s){return s.circuits.indexOf(cirId)>=0&&s.id!=='san-dona';});
+  var rows=getASDCircuitStandings(cirId);
+  var head=['POS','ASD'].concat(stgs.map(function(s){return asdStageLabel(s,cirId);})).concat(['TOTALE']);
+  var data=rows.map(function(r){
+    var byId={};r.stages.forEach(function(x){byId[x.stageId]=x;});
+    return {r:r,cells:stgs.map(function(s){return byId[s.id]||null;})};
+  });
+  return {stgs:stgs,head:head,data:data};
+}
+function asdCircAOA(cirId){
+  var t=asdCircTable(cirId);
+  var aoa=[t.head];
+  t.data.forEach(function(d){
+    aoa.push([d.r.pos,d.r.asd].concat(d.cells.map(function(c){
+      return c?(c.missing?'0 ('+c.missing+')':c.pts):'';
+    })).concat([d.r.total]));
+  });
+  return aoa;
+}
+function asdNatAOA(){
+  var aoa=[['POS','ASD','CIRCUITO','TAPPA 1','PUNTI','TAPPA 2','PUNTI','TAPPA 3','PUNTI','TAPPA ITALIA','FINALISSIMA','TOTALE']];
+  getASDNationalStandings().forEach(function(r){
+    var row=[r.pos,r.asd,r.cirs.map(function(c){return CIR[c]?CIR[c].name:c;}).join('/')];
+    for(var k=0;k<3;k++){var b=r.best3[k];row.push(b?stageName(b.stageId):'',b?b.pts:'');}
+    row.push(r.tiSt?(r.tiSt.missing?'0 ('+r.tiSt.missing+')':r.ti):'',r.hasFin?r.fin:'',r.total);
+    aoa.push(row);
+  });
+  return aoa;
 }
 
 // ── ASD CIRCUITI ─────────────────────────────────────────────
@@ -2338,16 +2422,15 @@ function confirmReset(){if(confirm('Cancellare tutti i dati? Operazione non reve
 function expCSV(){
   var cir=clState.circuit,cat=clState.cat;
   if(clState.showASD){
-    var cRows0=getASDCircuitStandings(cir);
-    var nat=getASDNationalStandings();
-    if(!cRows0.length&&!nat.length){alert('Nessun dato ASD da esportare.');return;}
-    var L=['CLASSIFICA ASD - '+CIR[cir].name,['POS','ASD','PUNTI CIRCUITO'].join(';')];
-    cRows0.forEach(function(r,i){L.push([i+1,r.asd,r.total].join(';'));});
-    if(nat.length){
+    var cA=asdCircAOA(cir);
+    var nA=asdNatAOA();
+    if(cA.length<2&&nA.length<2){alert('Nessun dato ASD da esportare.');return;}
+    var L=['CLASSIFICA ASD - '+CIR[cir].name];
+    cA.forEach(function(r){L.push(r.join(';'));});
+    if(nA.length>1){
       L.push('');
       L.push('CLASSIFICA NAZIONALE A SQUADRE');
-      L.push(['POS','ASD','PUNTI NAZIONALI'].join(';'));
-      nat.forEach(function(r,i){L.push([i+1,r.asd,r.total].join(';'));});
+      nA.forEach(function(r){L.push(r.join(';'));});
     }
     var bl=new Blob([L.join('\n')],{type:'text/csv;charset=utf-8;'});
     var an=document.createElement('a');an.href=URL.createObjectURL(bl);an.download=expFilename('csv');an.click();
@@ -2365,18 +2448,10 @@ function expXLS(){
   if(clState.showASD){
     if(typeof XLSX==='undefined'){alert('Libreria Excel non disponibile.');return;}
     var wbA=XLSX.utils.book_new();
-    var cRows=getASDCircuitStandings(cir);
-    if(cRows.length){
-      var d1=[['POS','ASD','PUNTI CIRCUITO']];
-      cRows.forEach(function(r,i){d1.push([i+1,r.asd,r.total]);});
-      XLSX.utils.book_append_sheet(wbA,XLSX.utils.aoa_to_sheet(d1),shName('ASD '+CIR[cir].name));
-    }
-    var nRows=getASDNationalStandings();
-    if(nRows.length){
-      var d2=[['POS','ASD','PUNTI NAZIONALI']];
-      nRows.forEach(function(r,i){d2.push([i+1,r.asd,r.total]);});
-      XLSX.utils.book_append_sheet(wbA,XLSX.utils.aoa_to_sheet(d2),'ASD Nazionale');
-    }
+    var d1=asdCircAOA(cir);
+    if(d1.length>1)XLSX.utils.book_append_sheet(wbA,XLSX.utils.aoa_to_sheet(d1),shName('ASD '+CIR[cir].name));
+    var d2=asdNatAOA();
+    if(d2.length>1)XLSX.utils.book_append_sheet(wbA,XLSX.utils.aoa_to_sheet(d2),'ASD Nazionale');
     if(!wbA.SheetNames.length){alert('Nessun dato da esportare.');return;}
     XLSX.writeFile(wbA,expFilename('xlsx'));
     return;
@@ -2587,18 +2662,10 @@ function expDossierCircuito(){
     if(!d)return;
     XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(d),shName(c.name));
   });
-  var asd=getASDCircuitStandings(cir);
-  if(asd.length){
-    var a1=[['POS','ASD','PUNTI CIRCUITO']];
-    asd.forEach(function(r,i){a1.push([i+1,r.asd,r.total]);});
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(a1),shName('ASD '+CIR[cir].name));
-  }
-  var nat=getASDNationalStandings();
-  if(nat.length){
-    var a2=[['POS','ASD','PUNTI NAZIONALI']];
-    nat.forEach(function(r,i){a2.push([i+1,r.asd,r.total]);});
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(a2),'ASD Nazionale');
-  }
+  var a1=asdCircAOA(cir);
+  if(a1.length>1)XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(a1),shName('ASD '+CIR[cir].name));
+  var a2=asdNatAOA();
+  if(a2.length>1)XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(a2),'ASD Nazionale');
   if(!wb.SheetNames.length){alert('Nessun dato da esportare per '+CIR[cir].name+'.');return;}
   var cn=CIR[cir].name.replace(/\s/g,'-').replace(/[^\w-]/g,'');
   XLSX.writeFile(wb,'NWS2026_Dossier_'+cn+'_'+new Date().toISOString().split('T')[0]+'.xlsx');
