@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -281,12 +280,17 @@ function getStandings(cirId,catId){
       if(!map[key])map[key]={key:key,display:(cat.type==='cop'?pairDisplay(row.p1,row.p2):canonPerson(((row.cognome||'')+' '+(row.nome||'')).trim())).toUpperCase(),assoc:row.assoc||'',stages:[],total:0};
       var pts=isTappaItalia(st.id)?posToPointsTI(row.pos):posToPoints(row.pos);
       var used=jolly?pts*2:pts;
-      map[key].stages.push({stageId:st.id,stageName:st.name,pts:pts,ptsUsed:used,isJolly:jolly});
+      var voto=pfloat(row.tot)||pfloat(row.pts);
+      map[key].stages.push({stageId:st.id,stageName:st.name,pts:pts,ptsUsed:used,isJolly:jolly,voto:voto});
+      if(!(map[key].bestVoto>=voto))map[key].bestVoto=voto;
       map[key].total+=used;
       map[key].assoc=row.assoc||map[key].assoc;
     }
   }
-  var arr=Object.values(map).sort(function(a,b){return b.total-a.total;});
+  /* Spareggio (decisione comitato Style, set. 2026): a parita' di punti prevale chi ha
+     il punteggio di tappa piu' alto, cioe' il voto totale dei giudici migliore ottenuto
+     in una singola tappa, Jolly compresa. */
+  var arr=Object.values(map).sort(function(a,b){return (b.total-a.total)||((b.bestVoto||0)-(a.bestVoto||0));});
   return arr.map(function(a,i){a.pos=i+1;return a;});
 }
 
@@ -2640,16 +2644,19 @@ function finalistiRows(cirId,catId){
   var qlim=QLIM[cirId]?QLIM[cirId][catId]||QLIM[cirId].def:10;
   if(!rows.length)return {rows:[],qlim:qlim,tie:false};
   if(rows.length<=qlim)return {rows:rows.map(function(r){return {r:r,tie:false,pos:r.pos};}),qlim:qlim,tie:false};
-  var cut=rows[qlim-1].total, tie=rows[qlim].total===cut;
+  var last=rows[qlim-1], next=rows[qlim];
+  var cut=last.total;
+  var tie=next.total===cut&&(next.bestVoto||0)===(last.bestVoto||0);      /* pari anche dopo lo spareggio */
+  var decided=!tie&&next.total===cut;                                     /* pari punti risolto dal voto */
   var out=[],firstTie=null;
   rows.forEach(function(r,i){
-    if(i<qlim||r.total===cut){
-      var t=tie&&r.total===cut;
+    if(i<qlim||(tie&&r.total===cut&&(r.bestVoto||0)===(last.bestVoto||0))){
+      var t=tie&&r.total===cut&&(r.bestVoto||0)===(last.bestVoto||0);
       if(t&&firstTie===null)firstTie=r.pos;
       out.push({r:r,tie:t,pos:t?firstTie:r.pos}); /* i pari merito mostrano la stessa posizione */
     }
   });
-  return {rows:out,qlim:qlim,tie:tie};
+  return {rows:out,qlim:qlim,tie:tie,decided:decided?{inR:last,outR:next}:null};
 }
 function finalistiHtml(cirId,cat,withStages){
   var f=finalistiRows(cirId,cat.id);
@@ -2693,6 +2700,7 @@ function finalistiHtml(cirId,cat,withStages){
       '<thead><tr style="background:#eef1f5"><th style="'+th+';text-align:left">POS</th><th style="'+th+';text-align:left;padding-left:6px">'+(isCop?'COPPIA':'ATLETA')+'</th><th style="'+th+';text-align:left">ASD</th>'+stgHead+'<th style="'+th+';text-align:right">'+(nS?'TOTALE':'PUNTI')+'</th></tr></thead>'+
       '<tbody>'+body+'</tbody></table>'+
     (f.tie?'<div style="margin-top:10px;font-size:12px;color:#b45309">&#x26A0;&#xFE0F; Pari merito sull\'ultimo posto utile: spareggio in attesa di decisione del comitato.</div>':'')+
+    (f.decided?'<div style="margin-top:10px;font-size:12px;color:#555">Pari merito a '+f.decided.inR.total+' punti con '+f.decided.outR.display+': prevale il punteggio di tappa pi&ugrave; alto ('+f.decided.inR.bestVoto+' contro '+f.decided.outR.bestVoto+').</div>':'')+
     '<div style="margin-top:8px;font-size:11px;color:#888">Punti circuito: somma di tutte le tappe (Jolly &times;2, Tappa Italia 100/99/98&hellip;)'+(nS?' &middot; &mdash; = tappa non disputata':'')+'</div>'+
     '</div>';
 }
