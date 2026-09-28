@@ -152,10 +152,10 @@ var STAGES=[
   {id:'san-dona',name:"S. Don\u00e0 di Piave",date:'2026-10-18',circuits:['fin'],jollyFor:[],label:'Finalissima'}
 ];
 var CATS=[
-  {id:'istruttore-m',name:'Istruttore Maschile',short:'Istr.M',type:'ind'},
-  {id:'istruttore-f',name:'Istruttore Femminile',short:'Istr.F',type:'ind'},
-  {id:'camminatore-m',name:'Camminatore Maschile',short:'Camm.M',type:'ind'},
-  {id:'camminatore-f',name:'Camminatrice Femminile',short:'Camm.F',type:'ind'},
+  {id:'istruttore-m',name:'Istruttori',short:'Istruttori',oldShort:'Istr.M',type:'ind'},
+  {id:'istruttore-f',name:'Istruttrici',short:'Istruttrici',oldShort:'Istr.F',type:'ind'},
+  {id:'camminatore-m',name:'Camminatori',short:'Camminatori',oldShort:'Camm.M',type:'ind'},
+  {id:'camminatore-f',name:'Camminatrici',short:'Camminatrici',oldShort:'Camm.F',type:'ind'},
   {id:'coppia-istr',name:'Coppie Istruttori',short:'C.Istr',type:'cop'},
   {id:'coppia-camm',name:'Coppie Camminatori',short:'C.Camm',type:'cop'},
   {id:'coppia-miste',name:'Coppie Miste',short:'C.Miste',type:'cop'}
@@ -902,6 +902,8 @@ function mnImport(files){
     try{
       var wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
       var target=shName(cat.short||cat.name);
+      /* compatibilita' con i modelli Excel scaricati prima del cambio nomi (Istr.M, Camm.F...) */
+      if(wb.SheetNames.indexOf(target)<0&&cat.oldShort&&wb.SheetNames.indexOf(shName(cat.oldShort))>=0)target=shName(cat.oldShort);
       var nm=wb.SheetNames.indexOf(target)>=0?target:(wb.SheetNames.filter(function(n){return n.toLowerCase().indexOf(String(cat.short||'').toLowerCase())>=0;})[0]||wb.SheetNames[0]);
       var sh=wb.Sheets[nm];
       var aoa=XLSX.utils.sheet_to_json(sh,{header:1,defval:''});
@@ -1409,7 +1411,7 @@ function buildStTable(cirId,catId){
   var stgCols=stgs.map(function(s){return '<th style="font-size:10px;text-align:center">'+s.name.substring(0,7)+(s.jollyFor.indexOf(cirId)>=0?'<br><span style="color:var(--red2)">J</span>':'')+'</th>';}).join('');
   var bodyRows=rows.map(function(r,i){
     var stgPts=stgs.map(function(s){var sp=null;for(var k=0;k<r.stages.length;k++){if(r.stages[k].stageId===s.id){sp=r.stages[k];break;}}return sp?'<td style="text-align:center;font-size:12px;'+(sp.isJolly?'color:var(--red2);font-weight:700':'')+'">'+(sp.ptsUsed)+(sp.isJolly?'&#x2605;':'')+'</td>':'<td style="text-align:center;color:var(--tx3)">&#x2014;</td>';}).join('');
-    var qBadge=qlim?'<span class="'+(i<qlim?'qy':i<qlim+5?'qm':'qn')+'">'+(i<qlim?'Q':i<qlim+5?'~':'')+'</span>':'';
+    var qBadge=(qlim&&i<qlim)?'<span class="qy">Q</span>':'';
     return '<tr class="'+(isASD(r.assoc)?'hl':'')+'"><td><div style="display:flex;align-items:center;gap:6px"><span class="pb p'+(i<3?i+1:'x')+'">'+(i+1)+'</span>'+qBadge+'</div></td><td style="font-weight:'+(isASD(r.assoc)?600:400)+'">'+r.display+'</td><td style="font-size:12px;color:'+(isASD(r.assoc)?'var(--red)':'var(--tx2)')+'">'+r.assoc+'</td><td style="text-align:center;color:var(--tx3)">'+r.stages.length+'</td>'+stgPts+'<td><span class="pts" style="color:'+c.color+'">'+r.total+'</span></td></tr>';
   }).join('');
   var nStg=stgs.length;
@@ -1463,7 +1465,7 @@ function renderFin(){
   var catBtns=CATS.map(function(c){return '<button class="tb'+(cat===c.id?' active':'')+'" style="'+(cat===c.id?'border-color:'+CIR[cir].color+';color:'+CIR[cir].color:'')+'" onclick="fnState.cat=\''+c.id+'\';renderFin()">'+c.name+'</button>';}).join('');
   el.innerHTML=
     '<h2 style="font-family:var(--fh);font-weight:800;font-size:28px;margin-bottom:16px">TRACKER <span style="color:var(--yel)">FINALISSIMA</span></h2>'+
-    '<div class="al ai" style="margin-bottom:20px">&#x2139;&#xFE0F; Nord/C-Sud: Top 10 per categoria (Camminatrici F: top 15). Sicilia: Top 5 (Camminatrici F: top 10).</div>'+
+    '<div class="al ai" style="margin-bottom:20px">&#x2139;&#xFE0F; Nord/C-Sud: Top 10 per categoria (Camminatrici: top 15). Sicilia: Top 5 (Camminatrici: top 10).</div>'+
     '<div class="eb"><button class="btn bg bsm" onclick="expDossierFinalissima()" title="Tutte le categorie e tutti i circuiti in un unico file Excel, un foglio per categoria">&#x1F4DA; Dossier Finalissima (Excel)</button></div>'+
     '<div class="tg">'+cirBtns+'</div>'+
     '<div class="tg">'+catBtns+'</div>'+
@@ -1483,7 +1485,7 @@ function buildFinTable(cirId,catId){
   var isCop=cat.type==='cop';
   var qlim=QLIM[cirId]?QLIM[cirId][catId]||QLIM[cirId].def:10;
   if(!rows.length)return '<div class="se">Nessun dato per '+c.name+' &ndash; '+cat.name+'</div>';
-  var bodyRows=rows.map(function(r,i){return '<tr class="'+(isASD(r.assoc)?'hl':'')+'"><td><span class="pb p'+(i<3?i+1:'x')+'">'+(i+1)+'</span></td><td style="font-weight:'+(isASD(r.assoc)?600:400)+'">'+r.display+'</td><td style="font-size:12px;color:'+(isASD(r.assoc)?'var(--red)':'var(--tx2)')+'">'+r.assoc+'</td><td style="text-align:center;color:var(--tx3)">'+r.stages.length+'</td><td class="pts" style="color:'+c.color+'">'+r.total+'</td><td>'+(i<qlim?'<span class="qy">&#x2705; QUALIFICATO</span>':i<qlim+5?'<span class="qm">&#x23F3; IN ZONA</span>':'<span class="qn">&mdash;</span>')+'</td></tr>';}).join('');
+  var bodyRows=rows.map(function(r,i){return '<tr class="'+(isASD(r.assoc)?'hl':'')+'"><td><span class="pb p'+(i<3?i+1:'x')+'">'+(i+1)+'</span></td><td style="font-weight:'+(isASD(r.assoc)?600:400)+'">'+r.display+'</td><td style="font-size:12px;color:'+(isASD(r.assoc)?'var(--red)':'var(--tx2)')+'">'+r.assoc+'</td><td style="text-align:center;color:var(--tx3)">'+r.stages.length+'</td><td class="pts" style="color:'+c.color+'">'+r.total+'</td><td>'+(i<qlim?'<span class="qy">&#x2705; QUALIFICATO</span>':'<span class="qn">&mdash;</span>')+'</td></tr>';}).join('');
   return '<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap"><span style="font-family:var(--fh);font-weight:700;font-size:18px">'+cat.name+' &ndash; '+c.name+'</span><span style="margin-left:auto;font-size:12px;color:var(--tx3)">Accesso: top <strong style="color:var(--yel)">'+qlim+'</strong></span></div><div class="tw"><table><thead><tr><th>POS</th><th>'+(isCop?'Coppia':'Atleta')+'</th><th>ASD</th><th>Tap.</th><th>Totale</th><th>Finalissima</th></tr></thead><tbody>'+bodyRows+'</tbody></table></div>';
 }
 
@@ -1506,9 +1508,7 @@ function buildNationalTracker(catId){
     var bodyRows=rows.map(function(r,i){
       var badge=i<qlim
         ?'<span class="qy" style="font-size:10px;padding:1px 5px">Q</span>'
-        :i<qlim+5
-          ?'<span class="qm" style="font-size:10px;padding:1px 5px">~</span>'
-          :'';
+        :'';
       return '<tr class="'+(isASD(r.assoc)?'hl':'')+'">'+
         '<td style="padding:5px 8px;white-space:nowrap">'+
           '<span class="pb p'+(i<3?i+1:'x')+'" style="width:20px;height:20px;font-size:11px">'+(i+1)+'</span>'+
@@ -1603,8 +1603,8 @@ function buildASDQualTable(asdName){
     return '<div class="se" style="padding:24px 0">Nessun atleta trovato per questa ASD nei dati caricati.</div>';
   }
   found.sort(function(a,b){
-    var aQ=a.pos<=a.qlim?0:a.pos<=a.qlim+5?1:2;
-    var bQ=b.pos<=b.qlim?0:b.pos<=b.qlim+5?1:2;
+    var aQ=a.pos<=a.qlim?0:1;
+    var bQ=b.pos<=b.qlim?0:1;
     if(aQ!==bQ)return aQ-bQ;
     return a.pos-b.pos;
   });
@@ -1618,9 +1618,7 @@ function buildASDQualTable(asdName){
       '<td style="padding:8px 12px">'+
         (r.pos<=r.qlim
           ?'<span class="qy">&#x2705; QUALIFICATO</span>'
-          :r.pos<=r.qlim+5
-            ?'<span class="qm">&#x23F3; IN ZONA</span>'
-            :'<span class="qn">&mdash;</span>')+
+          :'<span class="qn">&mdash;</span>')+
       '</td>'+
       '</tr>';
   }).join('');
@@ -2773,7 +2771,7 @@ function expDossierFinalissima(){
       data.push(['POS',(cat.type==='cop'?'Coppia':'Atleta'),'ASD','Tappe','Totale','Finalissima']);
       rows.forEach(function(r,i){
         data.push([i+1,r.display,r.assoc,r.stages.length,r.total,
-          (i<qlim?'QUALIFICATO':(i<qlim+5?'IN ZONA':''))]);
+          (i<qlim?'QUALIFICATO':'')]);
       });
     });
     if(!data.length)return;
