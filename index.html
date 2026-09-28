@@ -2482,7 +2482,8 @@ function expFilename(ext){
    da telefono e da PC. Oltre le 25 righe la classifica viene divisa in più
    parti, ognuna con intestazione, titolo e nota ripetuti.               */
 var EXP_WIDTH=1400;      // larghezza di rendering in px (PDF, A4 orizzontale)
-var EXP_IMG_WIDTH=1080;  // larghezza immagini PNG: formato verticale, colonne compatte
+var EXP_IMG_WIDTH=1080;  // larghezza di impaginazione immagini PNG: formato verticale, colonne compatte
+var EXP_IMG_OUT=2048;    // larghezza finale in pixel dei PNG: quella usata da Facebook, cosi' non li ridimensiona
 var EXP_SCALE=3;         // moltiplicatore di risoluzione
 var EXP_ROWS_PER_PAGE=22;// righe per parte (PDF)
 var EXP_IMG_ROWS=35;     // max righe per immagine PNG (parti bilanciate, formato verticale)
@@ -2565,7 +2566,7 @@ function expRender(ck,part,total,opt){
     host.appendChild(clone);
     document.body.appendChild(host);
     if(opt.compact)expCompact(clone);
-    html2canvas(host,{backgroundColor:'#ffffff',scale:EXP_SCALE,width:W,windowWidth:W}).then(function(canvas){
+    html2canvas(host,{backgroundColor:'#ffffff',scale:(opt.outWidth?opt.outWidth/W:EXP_SCALE),width:W,windowWidth:W}).then(function(canvas){
       if(host.parentNode)host.parentNode.removeChild(host);
       resolve(canvas);
     }).catch(function(e){
@@ -2612,7 +2613,7 @@ function expImg(){
   var i=0;
   function step(){
     if(i>=chunks.length){expImgPanel(items,chunks.length);return;}
-    expRender(chunks[i],i+1,chunks.length,{width:EXP_IMG_WIDTH,compact:true}).then(function(canvas){
+    expRender(chunks[i],i+1,chunks.length,{width:EXP_IMG_WIDTH,compact:true,outWidth:EXP_IMG_OUT}).then(function(canvas){
       var ck=chunks[i]||{};
       var suf=(ck.lab?'_'+ck.lab:'');
       if(ck.parts>1)suf+='_parte'+ck.part+'di'+ck.parts;
